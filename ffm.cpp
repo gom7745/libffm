@@ -18,7 +18,7 @@ R: Precomputed scaling factor to make the 2-norm of each instance to be 1. len(R
 v: Value of each element in the problem
 */
 
-#pragma GCC diagnostic ignored "-Wunused-result" 
+#pragma GCC diagnostic ignored "-Wunused-result"
 #include <algorithm>
 #include <cmath>
 #include <iostream>
@@ -75,10 +75,10 @@ inline ffm_float wTx(
     ffm_node *begin,
     ffm_node *end,
     ffm_float r,
-    ffm_model &model, 
-    ffm_float kappa=0, 
-    ffm_float eta=0, 
-    ffm_float lambda=0, 
+    ffm_model &model,
+    ffm_float kappa=0,
+    ffm_float eta=0,
+    ffm_float lambda=0,
     bool do_update=false) {
 
     ffm_int align0 = 2 * get_k_aligned(model.k);
@@ -139,9 +139,9 @@ inline ffm_float wTx(
                     XMMwg1 = _mm_add_ps(XMMwg1, _mm_mul_ps(XMMg1, XMMg1));
                     XMMwg2 = _mm_add_ps(XMMwg2, _mm_mul_ps(XMMg2, XMMg2));
 
-                    XMMw1 = _mm_sub_ps(XMMw1, _mm_mul_ps(XMMeta, 
+                    XMMw1 = _mm_sub_ps(XMMw1, _mm_mul_ps(XMMeta,
                             _mm_mul_ps(_mm_rsqrt_ps(XMMwg1), XMMg1)));
-                    XMMw2 = _mm_sub_ps(XMMw2, _mm_mul_ps(XMMeta, 
+                    XMMw2 = _mm_sub_ps(XMMw2, _mm_mul_ps(XMMeta,
                             _mm_mul_ps(_mm_rsqrt_ps(XMMwg2), XMMg2)));
 
                     _mm_store_ps(w1, XMMw1);
@@ -158,7 +158,7 @@ inline ffm_float wTx(
                     __m128  XMMw1 = _mm_load_ps(w1_base+d);
                     __m128  XMMw2 = _mm_load_ps(w2_base+d);
 
-                    XMMt = _mm_add_ps(XMMt, 
+                    XMMt = _mm_add_ps(XMMt,
                            _mm_mul_ps(_mm_mul_ps(XMMw1, XMMw2), XMMv));
                 }
             }
@@ -182,10 +182,10 @@ inline ffm_float wTx(
     ffm_node *begin,
     ffm_node *end,
     ffm_float r,
-    ffm_model &model, 
-    ffm_float kappa=0, 
-    ffm_float eta=0, 
-    ffm_float lambda=0, 
+    ffm_model &model,
+    ffm_float kappa=0,
+    ffm_float eta=0,
+    ffm_float lambda=0,
     bool do_update=false) {
 
     ffm_int align0 = 2 * get_k_aligned(model.k);
@@ -257,7 +257,7 @@ ffm_float* malloc_aligned_float(ffm_long size)
     #endif
 
 #endif
-    
+
     return (ffm_float*)ptr;
 }
 
@@ -271,7 +271,7 @@ ffm_model init_model(ffm_int n, ffm_int m, ffm_parameter param)
     model.normalization = param.normalization;
 
     ffm_int k_aligned = get_k_aligned(model.k);
-    
+
     model.W = malloc_aligned_float((ffm_long)n*m*k_aligned*2);
 
     ffm_float coef = 1.0f / sqrt(model.k);
@@ -392,7 +392,7 @@ uint64_t hashfile(string txt_path, bool one_block=false)
 }
 
 void txt2bin(string txt_path, string bin_path) {
-    
+
     FILE *f_txt = fopen(txt_path.c_str(), "r");
     if(f_txt == nullptr)
         throw;
@@ -464,9 +464,9 @@ void txt2bin(string txt_path, string bin_path) {
         P.push_back(p);
 
         if(X.size() > (size_t)kCHUNK_SIZE)
-            write_chunk(); 
+            write_chunk();
     }
-    write_chunk(); 
+    write_chunk();
     write_chunk(); // write a dummy empty chunk in order to know where the EOF is
     assert(meta.num_blocks == (ffm_int)B.size());
     meta.B_pos = f_bin.tellp();
@@ -515,7 +515,7 @@ ffm_model::~ffm_model() {
 void ffm_read_problem_to_disk(string txt_path, string bin_path) {
 
     Timer timer;
-    
+
     cout << "First check if the text file has already been converted to binary format " << flush;
     bool same_file = check_same_txt_bin(txt_path, bin_path);
     cout << "(" << fixed << setprecision(1) << timer.toc() << " seconds)" << endl;
@@ -580,7 +580,7 @@ ffm_model ffm_train_on_disk(string tr_path, string va_path, ffm_parameter param)
                 ffm_int i = inner_order[ii];
 
                 ffm_float y = prob.Y[i];
-                
+
                 ffm_node *begin = &prob.X[prob.P[i]];
 
                 ffm_node *end = &prob.X[prob.P[i+1]];
@@ -594,7 +594,7 @@ ffm_model ffm_train_on_disk(string tr_path, string va_path, ffm_parameter param)
                 loss += log1p(expnyt);
 
                 if(do_update) {
-                   
+
                     ffm_float kappa = -y*expnyt/(1+expnyt);
 
                     wTx(begin, end, r, model, kappa, param.eta, param.lambda, true);
@@ -628,7 +628,7 @@ ffm_model ffm_train_on_disk(string tr_path, string va_path, ffm_parameter param)
                     break;
                 } else {
                     memcpy(prev_W.data(), model.W, w_size*sizeof(ffm_float));
-                    best_va_loss = va_loss; 
+                    best_va_loss = va_loss;
                 }
             }
         }
@@ -687,7 +687,7 @@ ffm_float ffm_predict(ffm_node *begin, ffm_node *end, ffm_model &model) {
     if(model.normalization) {
         r = 0;
         for(ffm_node *N = begin; N != end; N++)
-            r += N->v*N->v; 
+            r += N->v*N->v;
         r = 1/r;
     }
 
@@ -696,4 +696,44 @@ ffm_float ffm_predict(ffm_node *begin, ffm_node *end, ffm_model &model) {
     return 1/(1+exp(-t));
 }
 
+ffm_float ffm_predict_on_disk(string te_path, ffm_model &model, vector<ffm_float>& va_scores, vector<ffm_float>& va_orders, vector<ffm_float>& va_labels, ffm_double subratio) {
+		problem_on_disk te(te_path);
+
+		ffm_float loss = 0;
+
+		ffm_int l = te.meta.l;
+		ffm_int global_i = 0;
+		va_labels.resize(l, 0), va_scores.resize(l, 0), va_orders.resize(l, 0);
+		vector<ffm_int> outer_order(te.meta.num_blocks);
+		iota(outer_order.begin(), outer_order.end(), 0);
+		for(auto blk:outer_order){
+			ffm_int ll = te.load_block(blk);
+			vector<ffm_int> inner_oder(ll);
+			iota(inner_oder.begin(), inner_oder.end(),0);
+#if defined USEOMP
+#pragma omp parallel for schedule(static) reduction(+:loss)
+#endif
+			for(ffm_int ii = 0; ii < ll; ii++){
+				ffm_int i = inner_oder[ii];
+				//timer.tic();
+				ffm_float y = te.Y[i];
+				ffm_node *begin = &te.X[te.P[i]];
+				ffm_node *end = &te.X[te.P[i+1]];
+				ffm_float r = model.normalization ? te.R[i] : 1;
+				ffm_float t = wTx(begin,end,r,model, 0, 0, 0, false);
+                t += log(subratio);
+				ffm_float expnyt = exp(-y*t);
+				loss += log1p(expnyt);
+				va_scores[global_i+i] = t;
+				va_orders[global_i+i] = global_i+i;
+				va_labels[global_i+i] = y;
+				//timer.toc();
+				//cout<<"one instance:"<<timer.get()<<endl;
+			}
+			global_i += ll;
+		}
+
+
+		return loss/te.meta.l;
+	}
 } // namespace ffm

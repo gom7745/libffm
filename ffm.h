@@ -46,6 +46,8 @@ ffm_model ffm_train_on_disk(string Tr_path, string Va_path, ffm_parameter param)
 
 ffm_float ffm_predict(ffm_node *begin, ffm_node *end, ffm_model &model);
 
+ffm_float ffm_predict_on_disk(string te_path, ffm_model &model, vector<ffm_float>& va_scores, vector<ffm_float>& va_orders, vector<ffm_float>& va_labels, ffm_double subratio);
+
 } // namespace ffm
 
 #endif // _LIBFFM_H

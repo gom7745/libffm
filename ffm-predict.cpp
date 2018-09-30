@@ -9,21 +9,40 @@
 #include <vector>
 #include <cstdlib>
 
+#include <algorithm>
 #include "ffm.h"
 
 using namespace std;
 using namespace ffm;
 
 struct Option {
-    string test_path, model_path, output_path;
+    string test_path, model_path, output_path,b_dir;
+    ffm_int nr_threads = 1;
+    ffm_double subratio = 1;
 };
 
-string predict_help() {
-    return string(
-"usage: ffm-predict test_file model_file output_file\n");
+string basename(string path){
+
+    const char *ptr = strrchr(&*path.begin(),'/');//get the last occurance of '/'
+    if(!ptr)
+        ptr = path.c_str();
+    else
+        ptr++;
+    return string(ptr);
 }
 
-Option parse_option(int argc, char **argv) {
+string predict_help(){
+    return string(
+            "usage: ffm-predict test_file model_file output_file\n"
+            "\n"
+            "options:\n"
+            "-s <nr_threads>:set number of threads (default 1)\n"
+            "-bd <bin data directory> set directory to the binary data\n"
+			"-sr <subratio>: set subratio for validation\n"
+    );
+}
+
+Option parse_option(int argc, char **argv){
     vector<string> args;
     for(int i = 0; i < argc; i++)
         args.push_back(string(argv[i]));
@@ -31,16 +50,101 @@ Option parse_option(int argc, char **argv) {
     if(argc == 1)
         throw invalid_argument(predict_help());
 
-    Option option;
+    Option opt;
 
-    if(argc != 4)
-        throw invalid_argument("cannot parse argument");
+    ffm_int i =1;
 
-    option.test_path = string(args[1]);
-    option.model_path = string(args[2]);
-    option.output_path = string(args[3]);
+    for(;i < argc; i++) {
+        if (args[i].compare("-s") == 0) {
+            if (i == argc - 1)
+                throw invalid_argument("need to specify number of threads after -s");
+            i++;
+            opt.nr_threads = atoi(args[i].c_str());
+            if (opt.nr_threads <= 0)
+                throw invalid_argument("number of threads should be greater than zero");
+        } else if(args[i].compare("-bd") == 0) {
+			if(i == argc - 1)
+                throw invalid_argument("need to specify validation path after -bd");
+			i++;
+			opt.b_dir = args[i];
+        } else if(args[i].compare("-sr") == 0) {
+            if(i == argc-1)
+                throw invalid_argument("need to specify subratio after -sr");
+            i++;
+            opt.subratio = atof(args[i].c_str());
+            if(opt.subratio < 0 || opt.subratio > 1)
+                throw invalid_argument("subratio should be between zero and one");
+		} else {
+            break;
+        }
+    }
 
-    return option;
+    if (i != argc - 3)
+        throw invalid_argument("cannot parse command\n");
+
+    opt.test_path = string(args[i++]);
+    opt.model_path = string(args[i++]);
+    opt.output_path = string(args[i++]);
+
+    return opt;
+}
+
+ffm_float cal_auc(vector<ffm_float>& va_orders, vector<ffm_float>& va_scores, vector<ffm_float>& va_labels) {
+	sort(va_orders.begin(), va_orders.end(), [&va_scores] (ffm_int i, ffm_int j) {return va_scores[i] < va_scores[j];});
+
+	ffm_float prev_score = va_scores[0];
+	ffm_long M = 0, N = 0;
+	ffm_long begin = 0, stuck_pos = 0, stuck_neg = 0;
+	ffm_float sum_pos_rank = 0;
+	ffm_int l = va_orders.size();
+	for (ffm_int i = 0; i < l; i++)
+	{
+		ffm_int sorted_i = va_orders[i];
+
+		ffm_float score = va_scores[sorted_i];
+		if (score != prev_score)
+		{
+			sum_pos_rank += stuck_pos*(begin+begin-1+stuck_pos+stuck_neg)*0.5;
+			prev_score = score;
+			begin = i;
+			stuck_neg = 0;
+			stuck_pos = 0;
+		}
+
+		ffm_float label = va_labels[sorted_i];
+		//printf("%lf %lf\n", score, label);
+
+		if (label > 0)
+		{
+			M++;
+			stuck_pos ++;
+		}
+		else
+		{
+			N++;
+			stuck_neg ++;
+		}
+	}
+	sum_pos_rank += stuck_pos*(begin+begin-1+stuck_pos+stuck_neg)*0.5;
+	ffm_float va_auc = (sum_pos_rank - 0.5*M*(M+1)) / (M*N);
+
+	return va_auc;
+}
+
+void predict_on_disk(Option opt) {
+    string te_bin_path = "./" + opt.b_dir + "/" + basename(opt.test_path) + ".bin";
+    ffm_read_problem_to_disk(opt.test_path, te_bin_path);
+    ffm_model model =  ffm_load_model(opt.model_path);
+	vector<ffm_float> va_labels, va_scores, va_orders;
+    ffm_float va_logloss = ffm_predict_on_disk(te_bin_path,  model, va_scores, va_orders, va_labels, opt.subratio);
+    ofstream f_out(opt.output_path);
+	for(ffm_float y_bar: va_scores) {
+		ffm_float expnyt = exp(-y_bar);
+        f_out<<1/(1+expnyt)<<"\n";
+	}
+	ffm_float va_auc = cal_auc(va_orders, va_scores, va_labels);
+    cout << "logloss = "<< fixed << setprecision(5)<< va_logloss << endl;
+    cout << "auc = "<< fixed << setprecision(5)<< va_auc << endl;
 }
 
 void predict(string test_path, string model_path, string output_path) {
@@ -99,7 +203,8 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-    predict(option.test_path, option.model_path, option.output_path);
+    //predict(option.test_path, option.model_path, option.output_path);
+	predict_on_disk(option);
 
     return 0;
 }
