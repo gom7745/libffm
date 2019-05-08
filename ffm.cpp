@@ -61,12 +61,6 @@ ffm_int const kALIGN = kALIGNByte/sizeof(ffm_float);
 ffm_int const kCHUNK_SIZE = 10000000;
 ffm_int const kMaxLineSize = 100000;
 
-inline float qrsqrt(float x)
-{
-    _mm_store_ss(&x, _mm_rsqrt_ps(_mm_load1_ps(&x)));
-    return x;
-}
-
 inline ffm_int get_k_aligned(ffm_int k) {
     return (ffm_int) ceil((ffm_float)k / kALIGN) * kALIGN;
 }
@@ -77,6 +71,13 @@ ffm_long get_w_size(ffm_model &model) {
 }
 
 #if defined USESSE
+
+inline float qrsqrt(float x)
+{
+    _mm_store_ss(&x, _mm_rsqrt_ps(_mm_load1_ps(&x)));
+    return x;
+}
+
 inline ffm_float wTx(
     ffm_node *begin,
     ffm_node *end,
@@ -97,6 +98,7 @@ inline ffm_float wTx(
 
     __m128 XMMt = _mm_setzero_ps();
 
+    ffm_float t = 0;
     for(ffm_node *N1 = begin; N1 != end; N1++)
     {
         ffm_int j1 = N1->j;
@@ -111,7 +113,7 @@ inline ffm_float wTx(
             ffm_float &wlg = model.WL[j1 * 2 + 1 ];
             ffm_float g = lambda * wl + kappa * v1 * sqrt_r;
             wlg += g * g;
-            wl -= eta * qrsqrt(wlg) * g;
+            wl -= eta / sqrt(wlg) * g;
         }
         else
         {
@@ -191,7 +193,7 @@ inline ffm_float wTx(
         ffm_float &wbg = model.WB[1];
         ffm_float g = kappa;
         wbg += g * g;
-        wb -= eta * qrsqrt(wbg) * g;
+        wb -= eta / sqrt(wbg) * g;
     }
     else
     {
@@ -203,10 +205,10 @@ inline ffm_float wTx(
 
     XMMt = _mm_hadd_ps(XMMt, XMMt);
     XMMt = _mm_hadd_ps(XMMt, XMMt);
-    ffm_float t;
-    _mm_store_ss(&t, XMMt);
+	ffm_float t_sse;
+    _mm_store_ss(&t_sse, XMMt);
 
-    return t;
+    return t + t_sse;
 }
 
 #else
@@ -239,7 +241,7 @@ inline ffm_float wTx(
             ffm_float &wlg = model.WL[j1 * 2 + 1 ];
             ffm_float g = lambda * wl + kappa * v1 * sqrt_r;
             wlg += g * g;
-            wl -= eta * qrsqrt(wlg) * g;
+            wl -= eta / sqrt(wlg) * g;
         }
         else
         {
@@ -285,7 +287,7 @@ inline ffm_float wTx(
         ffm_float &wbg = model.WB[1];
         ffm_float g = kappa;
         wbg += g * g;
-        wb -= eta * qrsqrt(wbg) * g;
+        wb -= eta / sqrt(wbg) * g;
     }
     else
     {
