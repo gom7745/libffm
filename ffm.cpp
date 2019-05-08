@@ -61,6 +61,12 @@ ffm_int const kALIGN = kALIGNByte/sizeof(ffm_float);
 ffm_int const kCHUNK_SIZE = 10000000;
 ffm_int const kMaxLineSize = 100000;
 
+inline float qrsqrt(float x)
+{
+    _mm_store_ss(&x, _mm_rsqrt_ps(_mm_load1_ps(&x)));
+    return x;
+}
+
 inline ffm_int get_k_aligned(ffm_int k) {
     return (ffm_int) ceil((ffm_float)k / kALIGN) * kALIGN;
 }
@@ -83,6 +89,7 @@ inline ffm_float wTx(
 
     ffm_int align0 = 2 * get_k_aligned(model.k);
     ffm_int align1 = model.m * align0;
+	ffm_float sqrt_r = sqrt(r);
 
     __m128 XMMkappa = _mm_set1_ps(kappa);
     __m128 XMMeta = _mm_set1_ps(eta);
@@ -97,6 +104,19 @@ inline ffm_float wTx(
         ffm_float v1 = N1->v;
         if(j1 >= model.n || f1 >= model.m)
             continue;
+
+		ffm_float &wl = model.WL[j1 * 2];
+        if(do_update)
+        {
+            ffm_float &wlg = model.WL[j1 * 2 + 1 ];
+            ffm_float g = lambda * wl + kappa * v1 * sqrt_r;
+            wlg += g * g;
+            wl -= eta * qrsqrt(wlg) * g;
+        }
+        else
+        {
+            t += wl * v1 * sqrt_r;
+        }
 
         for(ffm_node *N2 = N1+1; N2 != end; N2++)
         {
@@ -165,6 +185,19 @@ inline ffm_float wTx(
         }
     }
 
+	ffm_float &wb = model.WB[0];
+    if(do_update)
+    {
+        ffm_float &wbg = model.WB[1];
+        ffm_float g = kappa;
+        wbg += g * g;
+        wb -= eta * qrsqrt(wbg) * g;
+    }
+    else
+    {
+        t += wb;
+    }
+
     if(do_update)
         return 0;
 
@@ -190,6 +223,7 @@ inline ffm_float wTx(
 
     ffm_int align0 = 2 * get_k_aligned(model.k);
     ffm_int align1 = model.m * align0;
+	ffm_float sqrt_r = sqrt(r);
 
     ffm_float t = 0;
     for(ffm_node *N1 = begin; N1 != end; N1++) {
@@ -198,6 +232,19 @@ inline ffm_float wTx(
         ffm_float v1 = N1->v;
         if(j1 >= model.n || f1 >= model.m)
             continue;
+
+		ffm_float &wl = model.WL[j1 * 2];
+        if(do_update)
+        {
+            ffm_float &wlg = model.WL[j1 * 2 + 1 ];
+            ffm_float g = lambda * wl + kappa * v1 * sqrt_r;
+            wlg += g * g;
+            wl -= eta * qrsqrt(wlg) * g;
+        }
+        else
+        {
+            t += wl * v1 * sqrt_r;
+        }
 
         for(ffm_node *N2 = N1+1; N2 != end; N2++) {
             ffm_int j2 = N2->j;
@@ -230,6 +277,19 @@ inline ffm_float wTx(
                     t += w1[d] * w2[d] * v;
             }
         }
+    }
+
+	ffm_float &wb = model.WB[0];
+    if(do_update)
+    {
+        ffm_float &wbg = model.WB[1];
+        ffm_float g = kappa;
+        wbg += g * g;
+        wb -= eta * qrsqrt(wbg) * g;
+    }
+    else
+    {
+        t += wb;
     }
 
     return t;
@@ -273,6 +333,8 @@ ffm_model init_model(ffm_int n, ffm_int m, ffm_parameter param)
     ffm_int k_aligned = get_k_aligned(model.k);
     
     model.W = malloc_aligned_float((ffm_long)n*m*k_aligned*2);
+    model.WL = malloc_aligned_float((ffm_long)n*2);
+    model.WB = malloc_aligned_float((ffm_long)2);
 
     ffm_float coef = 1.0f / sqrt(model.k);
     ffm_float *w = model.W;
@@ -291,6 +353,15 @@ ffm_model init_model(ffm_int n, ffm_int m, ffm_parameter param)
             }
         }
     }
+
+    for(ffm_int j = 0; j < model.n; j++)
+    {
+        model.WL[j * 2] = 0;
+        model.WL[j * 2 + 1] = 1;
+    }
+
+    model.WB[0] = 0;
+    model.WB[1] = 1;
 
     return model;
 }
@@ -565,13 +636,13 @@ ffm_model ffm_train_on_disk(string tr_path, string va_path, ffm_parameter param)
 
         vector<ffm_int> outer_order(prob.meta.num_blocks);
         iota(outer_order.begin(), outer_order.end(), 0);
-        random_shuffle(outer_order.begin(), outer_order.end());
+        //random_shuffle(outer_order.begin(), outer_order.end());
         for(auto blk : outer_order) {
             ffm_int l = prob.load_block(blk);
 
             vector<ffm_int> inner_order(l);
             iota(inner_order.begin(), inner_order.end(), 0);
-            random_shuffle(inner_order.begin(), inner_order.end());
+            //random_shuffle(inner_order.begin(), inner_order.end());
 
 #if defined USEOMP
 #pragma omp parallel for schedule(static) reduction(+: loss)
@@ -656,6 +727,13 @@ void ffm_save_model(ffm_model &model, string path) {
         f_out.write(reinterpret_cast<char*>(model.W+offset), sizeof(ffm_float) * size);
         offset = next_offset;
     }
+    for(ffm_long offset = 0; offset < model.n*2; ) {
+        ffm_long next_offset = min((ffm_long )model.n*2, offset + (ffm_long) sizeof(ffm_float) * kCHUNK_SIZE);
+        ffm_long size = next_offset - offset;
+        f_out.write(reinterpret_cast<char*>(model.WL+offset), sizeof(ffm_float) * size);
+        offset = next_offset;
+    }
+	f_out.write(reinterpret_cast<char*>(model.WB), sizeof(ffm_float) * 2);
 }
 
 ffm_model ffm_load_model(string path) {
@@ -669,6 +747,8 @@ ffm_model ffm_load_model(string path) {
 
     ffm_long w_size = get_w_size(model);
     model.W = malloc_aligned_float(w_size);
+    model.WL = malloc_aligned_float(model.n*2);
+    model.WB = malloc_aligned_float(2);
     // f_in.read(reinterpret_cast<char*>(model.W), sizeof(ffm_float) * w_size);
     // Need to write chunk by chunk because some compiler use int32 and will overflow when w_size * 4 > MAX_INT
 
@@ -678,6 +758,13 @@ ffm_model ffm_load_model(string path) {
         f_in.read(reinterpret_cast<char*>(model.W+offset), sizeof(ffm_float) * size);
         offset = next_offset;
     }
+    for(ffm_long offset = 0; offset < model.n*2; ) {
+        ffm_long next_offset = min((ffm_long )model.n*2, offset + (ffm_long) sizeof(ffm_float) * kCHUNK_SIZE);
+        ffm_long size = next_offset - offset;
+        f_in.read(reinterpret_cast<char*>(model.WL+offset), sizeof(ffm_float) * size);
+        offset = next_offset;
+    }
+	f_in.read(reinterpret_cast<char*>(model.WB), sizeof(ffm_float) * 2);
 
     return model;
 }
