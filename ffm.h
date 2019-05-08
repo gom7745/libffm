@@ -23,6 +23,8 @@ struct ffm_model {
     ffm_int m; // number of fields
     ffm_int k; // number of latent factors
     ffm_float *W = nullptr;
+    ffm_float *WL = nullptr;
+    ffm_float *WB = nullptr;
     bool normalization;
     ~ffm_model();
 };
