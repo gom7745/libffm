@@ -28,6 +28,9 @@ struct ffm_model {
     ffm_int k; // number of latent factors
     ffm_float *W = nullptr;
     map<ffm_int, ffm_float *> W_map;
+    ffm_float *WL = nullptr;
+    map<ffm_int, ffm_float *> WL_map;
+    ffm_float *WB = nullptr;
     bool normalization;
     ~ffm_model();
     bool use_map = false;
