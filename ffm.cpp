@@ -957,6 +957,13 @@ ffm_int ffm_save_model_plain_text(ffm_model& model, char const *path)
         }
     }
 
+    ptr = model.WL;
+    for(ffm_int j = 0; j < model.n; j++) {
+        f_out << "wl " << *ptr << "\n";
+    }
+    ptr = model.WB;
+    f_out << "wb " << *ptr << "\n";
+
     return 0;
 }
 

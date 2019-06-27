@@ -10,13 +10,13 @@ CXXFLAGS += -fopenmp
 
 all: ffm-train ffm-predict ffm-b2t
 
+ffm-b2t: ffm-b2t.cpp ffm.o timer.o
+	$(CXX) $(CXXFLAGS) -o $@ $^
+
 ffm-train: ffm-train.cpp ffm.o timer.o
 	$(CXX) $(CXXFLAGS) $(DFLAG) -o $@ $^
 
 ffm-predict: ffm-predict.cpp ffm.o timer.o
-	$(CXX) $(CXXFLAGS) $(DFLAG) -o $@ $^
-
-ffm-b2t: ffm-b2t.cpp ffm.o timer.o
 	$(CXX) $(CXXFLAGS) $(DFLAG) -o $@ $^
 
 ffm.o: ffm.cpp ffm.h timer.o
