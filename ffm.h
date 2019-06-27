@@ -55,6 +55,8 @@ ffm_int ffm_save_model_plain_text(ffm_model& model, char const *path);
 
 ffm_model ffm_load_model_map(string path);
 
+ffm_int ffm_save_model_plain_text(ffm_model& model, char const *path);
+
 ffm_model ffm_load_model(string path);
 
 ffm_model ffm_load_model_plain_txt(string path);
