@@ -18,7 +18,7 @@ R: Precomputed scaling factor to make the 2-norm of each instance to be 1. len(R
 v: Value of each element in the problem
 */
 
-#pragma GCC diagnostic ignored "-Wunused-result" 
+#pragma GCC diagnostic ignored "-Wunused-result"
 #include <algorithm>
 #include <cmath>
 #include <iostream>
@@ -51,14 +51,10 @@ namespace {
 
 using namespace std;
 
-#if defined USESSE
-ffm_int const kALIGNByte = 16;
-#else
 ffm_int const kALIGNByte = 4;
-#endif
 
 ffm_int const kALIGN = kALIGNByte/sizeof(ffm_float);
-ffm_int const kCHUNK_SIZE = 10000000;
+ffm_int const kCHUNK_SIZE = 100000;
 ffm_int const kMaxLineSize = 100000;
 
 inline ffm_int get_k_aligned(ffm_int k) {
@@ -70,162 +66,18 @@ ffm_long get_w_size(ffm_model &model) {
     return (ffm_long) model.n * model.m * k_aligned * 2;
 }
 
-#if defined USESSE
-
-inline float qrsqrt(float x)
-{
-    _mm_store_ss(&x, _mm_rsqrt_ps(_mm_load1_ps(&x)));
-    return x;
-}
-
 inline ffm_float wTx(
     ffm_node *begin,
     ffm_node *end,
     ffm_float r,
-    ffm_model &model, 
-    ffm_float kappa=0, 
-    ffm_float eta=0, 
-    ffm_float lambda=0, 
+    ffm_model &model,
+    ffm_float kappa=0,
+    ffm_float eta=0,
+    ffm_float lambda=0,
     bool do_update=false) {
 
     ffm_int align0 = 2 * get_k_aligned(model.k);
     ffm_int align1 = model.m * align0;
-	ffm_float sqrt_r = sqrt(r);
-
-    __m128 XMMkappa = _mm_set1_ps(kappa);
-    __m128 XMMeta = _mm_set1_ps(eta);
-    __m128 XMMlambda = _mm_set1_ps(lambda);
-
-    __m128 XMMt = _mm_setzero_ps();
-
-    ffm_float t = 0;
-    for(ffm_node *N1 = begin; N1 != end; N1++)
-    {
-        ffm_int j1 = N1->j;
-        ffm_int f1 = N1->f;
-        ffm_float v1 = N1->v;
-        if(j1 >= model.n || f1 >= model.m)
-            continue;
-
-		ffm_float &wl = model.WL[j1 * 2];
-        if(do_update)
-        {
-            ffm_float &wlg = model.WL[j1 * 2 + 1 ];
-            ffm_float g = lambda * wl + kappa * v1 * sqrt_r;
-            wlg += g * g;
-            wl -= eta / sqrt(wlg) * g;
-        }
-        else
-        {
-            t += wl * v1 * sqrt_r;
-        }
-
-        for(ffm_node *N2 = N1+1; N2 != end; N2++)
-        {
-            ffm_int j2 = N2->j;
-            ffm_int f2 = N2->f;
-            ffm_float v2 = N2->v;
-            if(j2 >= model.n || f2 >= model.m)
-                continue;
-
-            ffm_float *w1_base = model.W + (ffm_long)j1*align1 + f2*align0;
-            ffm_float *w2_base = model.W + (ffm_long)j2*align1 + f1*align0;
-
-            __m128 XMMv = _mm_set1_ps(v1*v2*r);
-
-            if(do_update)
-            {
-                __m128 XMMkappav = _mm_mul_ps(XMMkappa, XMMv);
-
-                for(ffm_int d = 0; d < align0; d += kALIGN * 2)
-                {
-                    ffm_float *w1 = w1_base + d;
-                    ffm_float *w2 = w2_base + d;
-
-                    ffm_float *wg1 = w1 + kALIGN;
-                    ffm_float *wg2 = w2 + kALIGN;
-
-                    __m128 XMMw1 = _mm_load_ps(w1);
-                    __m128 XMMw2 = _mm_load_ps(w2);
-
-                    __m128 XMMwg1 = _mm_load_ps(wg1);
-                    __m128 XMMwg2 = _mm_load_ps(wg2);
-
-                    __m128 XMMg1 = _mm_add_ps(
-                                   _mm_mul_ps(XMMlambda, XMMw1),
-                                   _mm_mul_ps(XMMkappav, XMMw2));
-                    __m128 XMMg2 = _mm_add_ps(
-                                   _mm_mul_ps(XMMlambda, XMMw2),
-                                   _mm_mul_ps(XMMkappav, XMMw1));
-
-                    XMMwg1 = _mm_add_ps(XMMwg1, _mm_mul_ps(XMMg1, XMMg1));
-                    XMMwg2 = _mm_add_ps(XMMwg2, _mm_mul_ps(XMMg2, XMMg2));
-
-                    XMMw1 = _mm_sub_ps(XMMw1, _mm_mul_ps(XMMeta, 
-                            _mm_mul_ps(_mm_rsqrt_ps(XMMwg1), XMMg1)));
-                    XMMw2 = _mm_sub_ps(XMMw2, _mm_mul_ps(XMMeta, 
-                            _mm_mul_ps(_mm_rsqrt_ps(XMMwg2), XMMg2)));
-
-                    _mm_store_ps(w1, XMMw1);
-                    _mm_store_ps(w2, XMMw2);
-
-                    _mm_store_ps(wg1, XMMwg1);
-                    _mm_store_ps(wg2, XMMwg2);
-                }
-            }
-            else
-            {
-                for(ffm_int d = 0; d < align0; d += kALIGN * 2)
-                {
-                    __m128  XMMw1 = _mm_load_ps(w1_base+d);
-                    __m128  XMMw2 = _mm_load_ps(w2_base+d);
-
-                    XMMt = _mm_add_ps(XMMt, 
-                           _mm_mul_ps(_mm_mul_ps(XMMw1, XMMw2), XMMv));
-                }
-            }
-        }
-    }
-
-	ffm_float &wb = model.WB[0];
-    if(do_update)
-    {
-        ffm_float &wbg = model.WB[1];
-        ffm_float g = kappa;
-        wbg += g * g;
-        wb -= eta / sqrt(wbg) * g;
-    }
-    else
-    {
-        t += wb;
-    }
-
-    if(do_update)
-        return 0;
-
-    XMMt = _mm_hadd_ps(XMMt, XMMt);
-    XMMt = _mm_hadd_ps(XMMt, XMMt);
-	ffm_float t_sse;
-    _mm_store_ss(&t_sse, XMMt);
-
-    return t + t_sse;
-}
-
-#else
-
-inline ffm_float wTx(
-    ffm_node *begin,
-    ffm_node *end,
-    ffm_float r,
-    ffm_model &model, 
-    ffm_float kappa=0, 
-    ffm_float eta=0, 
-    ffm_float lambda=0, 
-    bool do_update=false) {
-
-    ffm_int align0 = 2 * get_k_aligned(model.k);
-    ffm_int align1 = model.m * align0;
-	ffm_float sqrt_r = sqrt(r);
 
     ffm_float t = 0;
     for(ffm_node *N1 = begin; N1 != end; N1++) {
@@ -238,14 +90,12 @@ inline ffm_float wTx(
 		ffm_float &wl = model.WL[j1 * 2];
         if(do_update)
         {
-            ffm_float &wlg = model.WL[j1 * 2 + 1 ];
-            ffm_float g = lambda * wl + kappa * v1 * sqrt_r;
-            wlg += g * g;
-            wl -= eta / sqrt(wlg) * g;
+            ffm_float g = lambda * wl + kappa * v1 * r;
+            wl -= eta * g;
         }
         else
         {
-            t += wl * v1 * sqrt_r;
+            t += wl * v1;
         }
 
         for(ffm_node *N2 = N1+1; N2 != end; N2++) {
@@ -258,7 +108,7 @@ inline ffm_float wTx(
             ffm_float *w1 = model.W + (ffm_long)j1*align1 + f2*align0;
             ffm_float *w2 = model.W + (ffm_long)j2*align1 + f1*align0;
 
-            ffm_float v = v1 * v2 * r;
+            ffm_float v = 2 * v1 * v2 * r;
 
             if(do_update) {
                 ffm_float *wg1 = w1 + kALIGN;
@@ -284,10 +134,8 @@ inline ffm_float wTx(
 	ffm_float &wb = model.WB[0];
     if(do_update)
     {
-        ffm_float &wbg = model.WB[1];
         ffm_float g = kappa;
-        wbg += g * g;
-        wb -= eta / sqrt(wbg) * g;
+        wb -= eta * g;
     }
     else
     {
@@ -296,7 +144,6 @@ inline ffm_float wTx(
 
     return t;
 }
-#endif
 
 ffm_float* malloc_aligned_float(ffm_long size)
 {
@@ -319,7 +166,7 @@ ffm_float* malloc_aligned_float(ffm_long size)
     #endif
 
 #endif
-    
+
     return (ffm_float*)ptr;
 }
 
@@ -333,12 +180,11 @@ ffm_model init_model(ffm_int n, ffm_int m, ffm_parameter param)
     model.normalization = param.normalization;
 
     ffm_int k_aligned = get_k_aligned(model.k);
-    
+
     model.W = malloc_aligned_float((ffm_long)n*m*k_aligned*2);
     model.WL = malloc_aligned_float((ffm_long)n*2);
     model.WB = malloc_aligned_float((ffm_long)2);
 
-    ffm_float coef = 1.0f / sqrt(model.k);
     ffm_float *w = model.W;
 
     default_random_engine generator;
@@ -348,7 +194,7 @@ ffm_model init_model(ffm_int n, ffm_int m, ffm_parameter param)
         for(ffm_int f = 0; f < model.m; f++) {
             for(ffm_int d = 0; d < k_aligned;) {
                 for(ffm_int s = 0; s < kALIGN; s++, w++, d++) {
-                    w[0] = (d < model.k)? coef * distribution(generator) : 0.0;
+                    w[0] = (d < model.k)? distribution(generator) : 0.0;
                     w[kALIGN] = 1;
                 }
                 w += kALIGN;
@@ -358,11 +204,11 @@ ffm_model init_model(ffm_int n, ffm_int m, ffm_parameter param)
 
     for(ffm_int j = 0; j < model.n; j++)
     {
-        model.WL[j * 2] = 0;
+        model.WL[j * 2] = distribution(generator);
         model.WL[j * 2 + 1] = 1;
     }
 
-    model.WB[0] = 0;
+    model.WB[0] = distribution(generator);
     model.WB[1] = 1;
 
     return model;
@@ -428,44 +274,8 @@ private:
     ifstream f;
 };
 
-uint64_t hashfile(string txt_path, bool one_block=false)
-{
-    ifstream f(txt_path, ios::ate | ios::binary);
-    if(f.bad())
-        return 0;
-
-    ffm_long end = (ffm_long) f.tellg();
-    f.seekg(0, ios::beg);
-    assert(static_cast<int>(f.tellg()) == 0);
-
-    uint64_t magic = 90359;
-    for(ffm_long pos = 0; pos < end; ) {
-        ffm_long next_pos = min(pos + kCHUNK_SIZE, end);
-        ffm_long size = next_pos - pos;
-        vector<char> buffer(kCHUNK_SIZE);
-        f.read(buffer.data(), size);
-
-        ffm_int i = 0;
-        while(i < size - 8) {
-            uint64_t x = *reinterpret_cast<uint64_t*>(buffer.data() + i);
-            magic = ( (magic + x) * (magic + x + 1) >> 1) + x;
-            i += 8;
-        }
-        for(; i < size; i++) {
-            char x = buffer[i];
-            magic = ( (magic + x) * (magic + x + 1) >> 1) + x;
-        }
-
-        pos = next_pos;
-        if(one_block)
-            break;
-    }
-
-    return magic;
-}
-
 void txt2bin(string txt_path, string bin_path) {
-    
+
     FILE *f_txt = fopen(txt_path.c_str(), "r");
     if(f_txt == nullptr)
         throw;
@@ -537,35 +347,18 @@ void txt2bin(string txt_path, string bin_path) {
         P.push_back(p);
 
         if(X.size() > (size_t)kCHUNK_SIZE)
-            write_chunk(); 
+            write_chunk();
     }
-    write_chunk(); 
+    write_chunk();
     write_chunk(); // write a dummy empty chunk in order to know where the EOF is
     assert(meta.num_blocks == (ffm_int)B.size());
     meta.B_pos = f_bin.tellp();
     f_bin.write(reinterpret_cast<char*>(B.data()), sizeof(ffm_long) * B.size());
 
     fclose(f_txt);
-    meta.hash1 = hashfile(txt_path, true);
-    meta.hash2 = hashfile(txt_path, false);
 
     f_bin.seekp(0, ios::beg);
     f_bin.write(reinterpret_cast<char*>(&meta), sizeof(disk_problem_meta));
-}
-
-bool check_same_txt_bin(string txt_path, string bin_path) {
-    ifstream f_bin(bin_path, ios::binary | ios::ate);
-    if(f_bin.tellg() < (ffm_long)sizeof(disk_problem_meta))
-        return false;
-    disk_problem_meta meta;
-    f_bin.seekg(0, ios::beg);
-    f_bin.read(reinterpret_cast<char*>(&meta), sizeof(disk_problem_meta));
-    if(meta.hash1 != hashfile(txt_path, true))
-        return false;
-    if(meta.hash2 != hashfile(txt_path, false))
-        return false;
-
-    return true;
 }
 
 } // unnamed namespace
@@ -586,20 +379,8 @@ ffm_model::~ffm_model() {
 }
 
 void ffm_read_problem_to_disk(string txt_path, string bin_path) {
-
     Timer timer;
-    
-    cout << "First check if the text file has already been converted to binary format " << flush;
-    bool same_file = check_same_txt_bin(txt_path, bin_path);
-    cout << "(" << fixed << setprecision(1) << timer.toc() << " seconds)" << endl;
-
-    if(same_file) {
-        cout << "Binary file found. Skip converting text to binary" << endl;
-    } else {
-        cout << "Binary file NOT found. Convert text file to binary file " << flush;
-        txt2bin(txt_path, bin_path);
-        cout << "(" << fixed << setprecision(1) << timer.toc() << " seconds)" << endl;
-    }
+    txt2bin(txt_path, bin_path);
 }
 
 ffm_model ffm_train_on_disk(string tr_path, string va_path, ffm_parameter param) {
@@ -638,13 +419,13 @@ ffm_model ffm_train_on_disk(string tr_path, string va_path, ffm_parameter param)
 
         vector<ffm_int> outer_order(prob.meta.num_blocks);
         iota(outer_order.begin(), outer_order.end(), 0);
-        //random_shuffle(outer_order.begin(), outer_order.end());
+        random_shuffle(outer_order.begin(), outer_order.end());
         for(auto blk : outer_order) {
             ffm_int l = prob.load_block(blk);
 
             vector<ffm_int> inner_order(l);
             iota(inner_order.begin(), inner_order.end(), 0);
-            //random_shuffle(inner_order.begin(), inner_order.end());
+            random_shuffle(inner_order.begin(), inner_order.end());
 
 #if defined USEOMP
 #pragma omp parallel for schedule(static) reduction(+: loss)
@@ -653,7 +434,7 @@ ffm_model ffm_train_on_disk(string tr_path, string va_path, ffm_parameter param)
                 ffm_int i = inner_order[ii];
 
                 ffm_float y = prob.Y[i];
-                
+
                 ffm_node *begin = &prob.X[prob.P[i]];
 
                 ffm_node *end = &prob.X[prob.P[i+1]];
@@ -667,7 +448,7 @@ ffm_model ffm_train_on_disk(string tr_path, string va_path, ffm_parameter param)
                 loss += log1p(expnyt);
 
                 if(do_update) {
-                   
+
                     ffm_float kappa = -y*expnyt/(1+expnyt);
 
                     wTx(begin, end, r, model, kappa, param.eta, param.lambda, true);
@@ -701,7 +482,7 @@ ffm_model ffm_train_on_disk(string tr_path, string va_path, ffm_parameter param)
                     break;
                 } else {
                     memcpy(prev_W.data(), model.W, w_size*sizeof(ffm_float));
-                    best_va_loss = va_loss; 
+                    best_va_loss = va_loss;
                 }
             }
         }
@@ -808,7 +589,7 @@ ffm_float ffm_predict(ffm_node *begin, ffm_node *end, ffm_model &model) {
     if(model.normalization) {
         r = 0;
         for(ffm_node *N = begin; N != end; N++)
-            r += N->v*N->v; 
+            r += N->v*N->v;
         r = 1/r;
     }
 
