@@ -8,12 +8,15 @@ DFLAG += -DUSESSE
 DFLAG += -DUSEOMP
 CXXFLAGS += -fopenmp
 
-all: ffm-train ffm-predict
+all: ffm-train ffm-predict ffm-b2t
 
 ffm-train: ffm-train.cpp ffm.o timer.o
 	$(CXX) $(CXXFLAGS) $(DFLAG) -o $@ $^
 
 ffm-predict: ffm-predict.cpp ffm.o timer.o
+	$(CXX) $(CXXFLAGS) $(DFLAG) -o $@ $^
+
+ffm-b2t: ffm-b2t.cpp ffm.o timer.o
 	$(CXX) $(CXXFLAGS) $(DFLAG) -o $@ $^
 
 ffm.o: ffm.cpp ffm.h timer.o
@@ -23,4 +26,4 @@ timer.o: timer.cpp timer.h
 	$(CXX) $(CXXFLAGS) $(DFLAG) -c -o $@ $<
 
 clean:
-	rm -f ffm-train ffm-predict ffm.o timer.o
+	rm -f ffm-train ffm-predict ffm-b2t ffm.o timer.o

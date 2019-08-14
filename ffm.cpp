@@ -658,6 +658,31 @@ void ffm_save_model(ffm_model &model, string path) {
     }
 }
 
+ffm_int ffm_save_model_plain_text(ffm_model& model, char const *path)
+{
+    ofstream f_out(path);
+    if(!f_out.is_open())
+        return 1;
+
+    f_out << "n " << model.n << "\n";
+    f_out << "m " << model.m << "\n";
+    f_out << "k " << model.k << "\n";
+    f_out << "normalization " << model.normalization << "\n";
+
+    ffm_float *ptr = model.W;
+    for(ffm_int j = 0; j < model.n; j++) {
+        for(ffm_int f = 0; f < model.m; f++) {
+            f_out << "w" << j << "," << f << " ";
+            for(ffm_int d = 0; d < model.k; d++, ptr++)
+                f_out << *ptr << " ";
+            f_out << "\n";
+            ptr += model.k;
+        }
+    }
+
+    return 0;
+}
+
 ffm_model ffm_load_model(string path) {
     ifstream f_in(path, ios::in | ios::binary);
 
