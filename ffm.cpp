@@ -106,8 +106,15 @@ inline ffm_float wTx(
             if(j2 >= model.n || f2 >= model.m)
                 continue;
 
-            ffm_float *w1_base = model.W + (ffm_long)j1*align1 + f2*align0;
-            ffm_float *w2_base = model.W + (ffm_long)j2*align1 + f1*align0;
+            ffm_float *w1_base, *w2_base;
+            if(model.use_map) {
+                w1_base = model.W_map[j1] + f2*align0;
+                w2_base = model.W_map[j2] + f1*align0;
+            }
+            else {
+                w1_base = model.W + (ffm_long)j1*align1 + f2*align0;
+                w2_base = model.W + (ffm_long)j2*align1 + f1*align0;
+            }
 
             __m128 XMMv = _mm_set1_ps(v1*v2*r);
 
@@ -683,6 +690,47 @@ ffm_int ffm_save_model_plain_text(ffm_model& model, char const *path)
     return 0;
 }
 
+ffm_model ffm_load_model_map(string path) {
+    ifstream f_in(path);
+    ffm_model model;
+
+    string dummy;
+    f_in >> dummy >> model.n;
+    f_in >> dummy >> model.m;
+    f_in >> dummy >> model.k;
+    f_in >> dummy >> model.normalization;
+    ffm_int k_aligned = get_k_aligned(model.k);
+
+    while(true) {
+        f_in >> dummy;
+        if(f_in.eof())
+            break;
+        ffm_int comma = dummy.find(",");
+        ffm_int j = strtol(dummy.substr(1, comma-1).c_str(), NULL, 10);
+        //ffm_int f = strtol(dummy.substr(comma+1, dummy.size()-1).c_str(), NULL, 10);
+        ffm_float *W = malloc_aligned_float((ffm_long)model.m*k_aligned*2);
+        ffm_float *ptr = W;
+        model.W_map[j] = W;
+
+        for(int d=0;d<model.k;d++, ptr++) {
+            f_in >> *ptr;
+        }
+        ptr += model.k;
+
+        for(int i=1;i<model.m;i++) {
+            f_in >> dummy;
+            comma = dummy.find(",");
+            //f = strtol(dummy.substr(comma+1, dummy.size()-1).c_str(), NULL, 10);
+            for(int d=0;d<model.k;d++, ptr++) {
+                f_in >> *ptr;
+            }
+            ptr += model.k;
+        }
+    }
+
+    return model;
+}
+
 ffm_model ffm_load_model(string path) {
     ifstream f_in(path, ios::in | ios::binary);
 
@@ -702,6 +750,31 @@ ffm_model ffm_load_model(string path) {
         ffm_long size = next_offset - offset;
         f_in.read(reinterpret_cast<char*>(model.W+offset), sizeof(ffm_float) * size);
         offset = next_offset;
+    }
+
+    return model;
+}
+
+ffm_model ffm_load_model_plain_txt(string path) {
+    ifstream f_in(path);
+    ffm_model model;
+
+    string dummy;
+    f_in >> dummy >> model.n;
+    f_in >> dummy >> model.m;
+    f_in >> dummy >> model.k;
+    f_in >> dummy >> model.normalization;
+    ffm_long w_size = get_w_size(model);
+    model.W = malloc_aligned_float(w_size);
+
+    ffm_float *ptr = model.W;
+    for(ffm_int j = 0; j < model.n; j++) {
+        for(ffm_int f = 0; f < model.m; f++) {
+            f_in >> dummy;
+            for(ffm_int d = 0; d < model.k; d++, ptr++)
+                f_in >> *ptr;
+            ptr += model.k;
+        }
     }
 
     return model;

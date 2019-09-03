@@ -2,6 +2,7 @@
 #define _LIBFFM_H
 
 #include <string>
+#include <map>
 
 namespace ffm {
 
@@ -23,8 +24,10 @@ struct ffm_model {
     ffm_int m; // number of fields
     ffm_int k; // number of latent factors
     ffm_float *W = nullptr;
+    map<ffm_int, ffm_float *> W_map;
     bool normalization;
     ~ffm_model();
+    bool use_map = true;
 };
 
 struct ffm_parameter {
@@ -42,7 +45,11 @@ void ffm_save_model(ffm_model &model, string path);
 
 ffm_int ffm_save_model_plain_text(ffm_model& model, char const *path);
 
+ffm_model ffm_load_model_map(string path);
+
 ffm_model ffm_load_model(string path);
+
+ffm_model ffm_load_model_plain_txt(string path);
 
 ffm_model ffm_train_on_disk(string Tr_path, string Va_path, ffm_parameter param);
 

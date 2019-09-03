@@ -134,7 +134,9 @@ ffm_float cal_auc(vector<ffm_float>& va_orders, vector<ffm_float>& va_scores, ve
 void predict_on_disk(Option opt) {
     string te_bin_path = "./" + opt.b_dir + "/" + basename(opt.test_path) + ".bin";
     ffm_read_problem_to_disk(opt.test_path, te_bin_path);
-    ffm_model model =  ffm_load_model(opt.model_path);
+    //ffm_model model =  ffm_load_model(opt.model_path);
+    //ffm_model model =  ffm_load_model_plain_txt(opt.model_path);
+    ffm_model model = ffm_load_model_map(opt.model_path);
 	vector<ffm_float> va_labels, va_scores, va_orders;
     ffm_float va_logloss = ffm_predict_on_disk(te_bin_path,  model, va_scores, va_orders, va_labels, opt.subratio);
     ofstream f_out(opt.output_path);
