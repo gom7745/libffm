@@ -98,6 +98,11 @@ inline ffm_float wTx(
         if(j1 >= model.n || f1 >= model.m)
             continue;
 
+        ffm_float *w1_head;
+        if(model.use_map) {
+            w1_head = model.W_map[j1];
+        }
+
         for(ffm_node *N2 = N1+1; N2 != end; N2++)
         {
             ffm_int j2 = N2->j;
@@ -106,9 +111,10 @@ inline ffm_float wTx(
             if(j2 >= model.n || f2 >= model.m)
                 continue;
 
-            ffm_float *w1_base, *w2_base;
+            ffm_float *w1_base;
+            ffm_float *w2_base;
             if(model.use_map) {
-                w1_base = model.W_map[j1] + f2*align0;
+                w1_base = w1_head + f2*align0;
                 w2_base = model.W_map[j2] + f1*align0;
             }
             else {
