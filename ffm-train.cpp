@@ -29,6 +29,7 @@ string train_help() {
 "-m <ws_model_path>: set the warm-start model path\n"
 "-p <path>: set path to the validation set\n"
 "--auc: display auc on validation set (must be used with -p)\n "
+"--use-map: store weight as map\n"
 "--quiet: quiet mode (no output)\n"
 "--no-norm: disable instance-wise normalization\n"
 "--auto-stop: stop at the iteration that achieves the best validation loss (must be used with -p)\n");
@@ -110,6 +111,8 @@ Option parse_option(int argc, char **argv) {
             opt.va_path = args[i];
         } else if(args[i].compare("--auc") == 0) {
             opt.param.do_auc = true;
+        } else if(args[i].compare("--use-map") == 0) {
+            opt.param.use_map = true;
         } else if(args[i].compare("--no-norm") == 0) {
             opt.param.normalization = false;
         } else if(args[i].compare("--quiet") == 0) {
@@ -148,7 +151,10 @@ int train_on_disk(Option opt) {
 
     ffm_model model = ffm_train_on_disk(tr_bin_path.c_str(), va_bin_path.c_str(), opt.param);
 
-    ffm_save_model(model, opt.model_path);
+    if(opt.param.use_map)
+        ffm_save_model_map(model, opt.model_path);
+    else
+        ffm_save_model(model, opt.model_path);
 
     return 0;
 }

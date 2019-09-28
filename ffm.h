@@ -4,6 +4,8 @@
 #include <fstream>
 #include <string>
 #include <map>
+#include <cassert>
+#include <fstream>
 
 namespace ffm {
 
@@ -28,7 +30,7 @@ struct ffm_model {
     map<ffm_int, ffm_float *> W_map;
     bool normalization;
     ~ffm_model();
-    bool use_map = true;
+    bool use_map = false;
 };
 
 struct ffm_parameter {
@@ -40,6 +42,7 @@ struct ffm_parameter {
     bool auto_stop = false;
 	bool do_auc = false;
     string ws_model_path;
+    bool use_map = false;
 };
 
 struct disk_problem_meta {
@@ -80,6 +83,8 @@ void ffm_problem_info(problem_on_disk &prob, string &path);
 void ffm_read_problem_to_disk(string txt_path, string bin_path);
 
 void ffm_save_model(ffm_model &model, string path);
+
+void ffm_save_model_map(ffm_model &model, string path);
 
 ffm_int ffm_save_model_plain_text(ffm_model& model, char const *path);
 
