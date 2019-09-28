@@ -1,4 +1,4 @@
-#pragma GCC diagnostic ignored "-Wunused-result" 
+#pragma GCC diagnostic ignored "-Wunused-result"
 #include <algorithm>
 #include <cstring>
 #include <iostream>
@@ -27,6 +27,7 @@ string train_help() {
 "-r <eta>: set learning rate (default 0.2)\n"
 "-s <nr_threads>: set number of threads (default 1)\n"
 "-p <path>: set path to the validation set\n"
+"--use-map: store weight as map\n"
 "--quiet: quiet mode (no output)\n"
 "--no-norm: disable instance-wise normalization\n"
 "--auto-stop: stop at the iteration that achieves the best validation loss (must be used with -p)\n");
@@ -103,6 +104,8 @@ Option parse_option(int argc, char **argv) {
                 throw invalid_argument("need to specify path after -p");
             i++;
             opt.va_path = args[i];
+        } else if(args[i].compare("--use-map") == 0) {
+            opt.param.use_map = true;
         } else if(args[i].compare("--no-norm") == 0) {
             opt.param.normalization = false;
         } else if(args[i].compare("--quiet") == 0) {
@@ -141,7 +144,10 @@ int train_on_disk(Option opt) {
 
     ffm_model model = ffm_train_on_disk(tr_bin_path.c_str(), va_bin_path.c_str(), opt.param);
 
-    ffm_save_model(model, opt.model_path);
+    if(opt.param.use_map)
+        ffm_save_model_map(model, opt.model_path);
+    else
+        ffm_save_model(model, opt.model_path);
 
     return 0;
 }

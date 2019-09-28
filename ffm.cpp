@@ -23,7 +23,6 @@ v: Value of each element in the problem
 #include <cmath>
 #include <iostream>
 #include <iomanip>
-#include <fstream>
 #include <new>
 #include <memory>
 #include <random>
@@ -31,7 +30,6 @@ v: Value of each element in the problem
 #include <string>
 #include <cstring>
 #include <vector>
-#include <cassert>
 #include <numeric>
 
 #if defined USESSE
@@ -60,6 +58,31 @@ ffm_int const kALIGNByte = 4;
 ffm_int const kALIGN = kALIGNByte/sizeof(ffm_float);
 ffm_int const kCHUNK_SIZE = 10000000;
 ffm_int const kMaxLineSize = 100000;
+
+ffm_float* malloc_aligned_float(ffm_long size)
+{
+    void *ptr;
+
+#ifndef USESSE
+
+    ptr = malloc(size * sizeof(ffm_float));
+
+#else
+
+    #ifdef _WIN32
+        ptr = _aligned_malloc(size*sizeof(ffm_float), kALIGNByte);
+        if(ptr == nullptr)
+            throw bad_alloc();
+    #else
+        int status = posix_memalign(&ptr, kALIGNByte, size*sizeof(ffm_float));
+        if(status != 0)
+            throw bad_alloc();
+    #endif
+
+#endif
+
+    return (ffm_float*)ptr;
+}
 
 inline ffm_int get_k_aligned(ffm_int k) {
     return (ffm_int) ceil((ffm_float)k / kALIGN) * kALIGN;
@@ -98,10 +121,9 @@ inline ffm_float wTx(
         if(j1 >= model.n || f1 >= model.m)
             continue;
 
-        ffm_float *w1_head;
-        if(model.use_map) {
+        ffm_float *w1_head = nullptr;
+        if(model.use_map)
             w1_head = model.W_map[j1];
-        }
 
         for(ffm_node *N2 = N1+1; N2 != end; N2++)
         {
@@ -249,29 +271,50 @@ inline ffm_float wTx(
 }
 #endif
 
-ffm_float* malloc_aligned_float(ffm_long size)
+ffm_float *init_field(ffm_model &model)  {
+    ffm_int k_aligned = get_k_aligned(model.k);
+    ffm_float coef = 1.0f / sqrt(model.k);
+    ffm_float *W = malloc_aligned_float((ffm_long)model.m*k_aligned*2);
+    ffm_float *w = W;
+    default_random_engine generator;
+    uniform_real_distribution<ffm_float> distribution(0.0, 1.0);
+    for(ffm_int f = 0; f < model.m; f++) {
+        for(ffm_int d = 0; d < k_aligned;) {
+            for(ffm_int s = 0; s < kALIGN; s++, w++, d++) {
+                w[0] = (d < model.k)? coef * distribution(generator) : 0.0;
+                w[kALIGN] = 1;
+            }
+            w += kALIGN;
+        }
+    }
+
+    return W;
+}
+
+ffm_model init_model_map(ffm_int n, ffm_int m, ffm_parameter param, string tr_path)
 {
-    void *ptr;
+    ffm_model model;
+    model.n = n;
+    model.k = param.k;
+    model.m = m;
+    model.W = nullptr;
+    model.normalization = param.normalization;
 
-#ifndef USESSE
+    problem_on_disk prob(tr_path);
+    for(int blk=0; blk < prob.meta.num_blocks; blk++) {
+        ffm_int l = prob.load_block(blk);
+        for(ffm_int i=0; i<l; i++) {
+            ffm_node *begin = &prob.X[prob.P[i]];
+            ffm_node *end = &prob.X[prob.P[i+1]];
+            for(ffm_node *N=begin;N!=end;N++) {
+                ffm_int j = N->j;
+                if(model.W_map.find(j)==model.W_map.end())
+                    model.W_map[j] = init_field(model);
+            }
+        }
+    }
 
-    ptr = malloc(size * sizeof(ffm_float));
-
-#else
-
-    #ifdef _WIN32
-        ptr = _aligned_malloc(size*sizeof(ffm_float), kALIGNByte);
-        if(ptr == nullptr)
-            throw bad_alloc();
-    #else
-        int status = posix_memalign(&ptr, kALIGNByte, size*sizeof(ffm_float));
-        if(status != 0)
-            throw bad_alloc();
-    #endif
-
-#endif
-
-    return (ffm_float*)ptr;
+    return model;
 }
 
 ffm_model init_model(ffm_int n, ffm_int m, ffm_parameter param)
@@ -284,7 +327,6 @@ ffm_model init_model(ffm_int n, ffm_int m, ffm_parameter param)
     model.normalization = param.normalization;
 
     ffm_int k_aligned = get_k_aligned(model.k);
-
     model.W = malloc_aligned_float((ffm_long)n*m*k_aligned*2);
 
     ffm_float coef = 1.0f / sqrt(model.k);
@@ -307,66 +349,6 @@ ffm_model init_model(ffm_int n, ffm_int m, ffm_parameter param)
 
     return model;
 }
-
-struct disk_problem_meta {
-    ffm_int n = 0;
-    ffm_int m = 0;
-    ffm_int l = 0;
-    ffm_int num_blocks = 0;
-    ffm_long B_pos = 0;
-    uint64_t hash1;
-    uint64_t hash2;
-};
-
-struct problem_on_disk {
-    disk_problem_meta meta;
-    vector<ffm_float> Y;
-    vector<ffm_float> R;
-    vector<ffm_long> P;
-    vector<ffm_node> X;
-    vector<ffm_long> B;
-
-    problem_on_disk(string path) {
-        f.open(path, ios::in | ios::binary);
-        if(f.good()) {
-            f.read(reinterpret_cast<char*>(&meta), sizeof(disk_problem_meta));
-            f.seekg(meta.B_pos);
-            B.resize(meta.num_blocks);
-            f.read(reinterpret_cast<char*>(B.data()), sizeof(ffm_long) * meta.num_blocks);
-        }
-    }
-
-    int load_block(int block_index) {
-        if(block_index >= meta.num_blocks)
-            assert(false);
-
-        f.seekg(B[block_index]);
-
-        ffm_int l;
-        f.read(reinterpret_cast<char*>(&l), sizeof(ffm_int));
-
-        Y.resize(l);
-        f.read(reinterpret_cast<char*>(Y.data()), sizeof(ffm_float) * l);
-
-        R.resize(l);
-        f.read(reinterpret_cast<char*>(R.data()), sizeof(ffm_float) * l);
-
-        P.resize(l+1);
-        f.read(reinterpret_cast<char*>(P.data()), sizeof(ffm_long) * (l+1));
-
-        X.resize(P[l]);
-        f.read(reinterpret_cast<char*>(X.data()), sizeof(ffm_node) * P[l]);
-
-        return l;
-    }
-
-    bool is_empty() {
-        return meta.l == 0;
-    }
-
-private:
-    ifstream f;
-};
 
 uint64_t hashfile(string txt_path, bool one_block=false)
 {
@@ -511,7 +493,8 @@ bool check_same_txt_bin(string txt_path, string bin_path) {
 } // unnamed namespace
 
 ffm_model::~ffm_model() {
-    if(W != nullptr) {
+    /*
+    if(W != nullptr && ~use_map) {
 #ifndef USESSE
         free(W);
 #else
@@ -523,6 +506,7 @@ ffm_model::~ffm_model() {
 #endif
         W = nullptr;
     }
+    */
 }
 
 void ffm_read_problem_to_disk(string txt_path, string bin_path) {
@@ -542,19 +526,45 @@ void ffm_read_problem_to_disk(string txt_path, string bin_path) {
     }
 }
 
+void copy_W_map(map<ffm_int, ffm_float *> &des, map<ffm_int, ffm_float *> &src, ffm_model &model) {
+    ffm_int align0 = 2 * get_k_aligned(model.k);
+    ffm_int align1 = model.m * align0;
+    for(auto p:src) {
+        ffm_float *w1=p.second, *w2=des[p.first];
+        memcpy(w2, w1, align1);
+    }
+}
+
 ffm_model ffm_train_on_disk(string tr_path, string va_path, ffm_parameter param) {
 
     problem_on_disk tr(tr_path);
     problem_on_disk va(va_path);
 
-    ffm_model model = init_model(tr.meta.n, tr.meta.m, param);
+    ffm_model model;
+    if(param.use_map) {
+        model = init_model_map(tr.meta.n, tr.meta.m, param, tr_path);
+        model.use_map = true;
+    }
+    else
+        model = init_model(tr.meta.n, tr.meta.m, param);
 
     bool auto_stop = param.auto_stop && !va_path.empty();
 
     ffm_long w_size = get_w_size(model);
-    vector<ffm_float> prev_W(w_size, 0);
-    if(auto_stop)
-        prev_W.assign(w_size, 0);
+    vector<ffm_float> prev_W;
+    map<ffm_int, ffm_float *> prev_W_map;
+    if(auto_stop) {
+        if(param.use_map) {
+            for(auto p:model.W_map) {
+                ffm_int j = p.first;
+                prev_W_map[j] =  init_field(model);
+            }
+        }
+        else {
+            prev_W.resize(w_size);
+            prev_W.assign(w_size, 0);
+        }
+    }
     ffm_double best_va_loss = numeric_limits<ffm_double>::max();
 
     cout.width(4);
@@ -636,11 +646,17 @@ ffm_model ffm_train_on_disk(string tr_path, string va_path, ffm_parameter param)
 
             if(auto_stop) {
                 if(va_loss > best_va_loss) {
-                    memcpy(model.W, prev_W.data(), w_size*sizeof(ffm_float));
+                    if(param.use_map)
+                        copy_W_map(model.W_map, prev_W_map, model);
+                    else
+                        memcpy(model.W, prev_W.data(), w_size*sizeof(ffm_float));
                     cout << endl << "Auto-stop. Use model at " << iter-1 << "th iteration." << endl;
                     break;
                 } else {
-                    memcpy(prev_W.data(), model.W, w_size*sizeof(ffm_float));
+                    if(param.use_map)
+                        copy_W_map(prev_W_map, model.W_map, model);
+                    else
+                        memcpy(prev_W.data(), model.W, w_size*sizeof(ffm_float));
                     best_va_loss = va_loss;
                 }
             }
@@ -650,6 +666,41 @@ ffm_model ffm_train_on_disk(string tr_path, string va_path, ffm_parameter param)
     }
 
     return model;
+}
+
+void ffm_save_model_map(ffm_model &model, string path) {
+    ofstream f_out(path);
+    if(!f_out.is_open())
+        return;
+
+    f_out << "n " << model.n << "\n";
+    f_out << "m " << model.m << "\n";
+    f_out << "k " << model.k << "\n";
+    f_out << "normalization " << model.normalization << "\n";
+
+    ffm_int k_aligned = get_k_aligned(model.k);
+
+    for(auto p:model.W_map) {
+        ffm_int j = p.first;
+        ffm_float *W = p.second;
+        ffm_float *ptr = W;
+
+        f_out << "w" << j << "," << 0 << " ";
+        for(int d=0;d<k_aligned;d++, ptr++) {
+            f_out << *ptr << " ";
+        }
+        f_out << "\n";
+        ptr += model.k;
+
+        for(int f=1;f<model.m;f++) {
+            f_out << "w" << j << "," << f << " ";
+            for(int d=0;d<k_aligned;d++, ptr++) {
+                f_out << *ptr << " ";
+            }
+            f_out << "\n";
+            ptr += model.k;
+        }
+    }
 }
 
 void ffm_save_model(ffm_model &model, string path) {

@@ -19,6 +19,7 @@ struct Option {
     string test_path, model_path, output_path,b_dir;
     ffm_int nr_threads = 1;
     ffm_double subratio = 1;
+    ffm_parameter param;
 };
 
 string basename(string path){
@@ -39,6 +40,7 @@ string predict_help(){
             "-s <nr_threads>:set number of threads (default 1)\n"
             "-bd <bin data directory> set directory to the binary data\n"
 			"-sr <subratio>: set subratio for validation\n"
+            "--use-map: store weight as map\n"
     );
 }
 
@@ -62,6 +64,8 @@ Option parse_option(int argc, char **argv){
             opt.nr_threads = atoi(args[i].c_str());
             if (opt.nr_threads <= 0)
                 throw invalid_argument("number of threads should be greater than zero");
+        } else if(args[i].compare("--use-map") == 0) {
+            opt.param.use_map = true;
         } else if(args[i].compare("-bd") == 0) {
 			if(i == argc - 1)
                 throw invalid_argument("need to specify validation path after -bd");
@@ -134,9 +138,13 @@ ffm_float cal_auc(vector<ffm_float>& va_orders, vector<ffm_float>& va_scores, ve
 void predict_on_disk(Option opt) {
     string te_bin_path = "./" + opt.b_dir + "/" + basename(opt.test_path) + ".bin";
     ffm_read_problem_to_disk(opt.test_path, te_bin_path);
-    //ffm_model model =  ffm_load_model(opt.model_path);
-    //ffm_model model =  ffm_load_model_plain_txt(opt.model_path);
-    ffm_model model = ffm_load_model_map(opt.model_path);
+    ffm_model model;
+    if(opt.param.use_map) {
+        model = ffm_load_model_map(opt.model_path);
+        model.use_map = opt.param.use_map;
+    }
+    else
+        model =  ffm_load_model(opt.model_path);
 	vector<ffm_float> va_labels, va_scores, va_orders;
     ffm_float va_logloss = ffm_predict_on_disk(te_bin_path,  model, va_scores, va_orders, va_labels, opt.subratio);
     ofstream f_out(opt.output_path);
