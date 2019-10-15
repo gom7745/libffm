@@ -701,7 +701,7 @@ void ffm_problem_info(problem_on_disk &prob, string &path) {
             " #block: " << prob.meta.num_blocks << " #nnz: " << prob.meta.nnz << endl;
 }
 
-void copy_W_map(map<ffm_int, ffm_float *> &des, map<ffm_int, ffm_float *> &src, ffm_model &model) {
+void copy_W_map(unordered_map<ffm_int, ffm_float *> &des, unordered_map<ffm_int, ffm_float *> &src, ffm_model &model) {
     ffm_int align0 = 2 * get_k_aligned(model.k);
     ffm_int align1 = model.m * align0;
     for(auto p:src) {
@@ -731,7 +731,7 @@ ffm_model ffm_train_on_disk(string tr_path, string va_path, ffm_parameter param)
 
     ffm_long w_size = get_w_size(model);
     vector<ffm_float> prev_W;
-    map<ffm_int, ffm_float *> prev_W_map;
+    unordered_map<ffm_int, ffm_float *> prev_W_map;
     if(auto_stop) {
         if(param.use_map) {
             for(auto p:model.W_map) {

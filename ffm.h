@@ -3,7 +3,7 @@
 
 #include <fstream>
 #include <string>
-#include <map>
+#include <unordered_map>
 #include <cassert>
 #include <fstream>
 
@@ -27,9 +27,9 @@ struct ffm_model {
     ffm_int m; // number of fields
     ffm_int k; // number of latent factors
     ffm_float *W = nullptr;
-    map<ffm_int, ffm_float *> W_map;
+    unordered_map<ffm_int, ffm_float *> W_map;
     ffm_float *WL = nullptr;
-    map<ffm_int, ffm_float *> WL_map;
+    unordered_map<ffm_int, ffm_float *> WL_map;
     ffm_float *WB = nullptr;
     bool normalization;
     ~ffm_model();
