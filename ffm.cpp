@@ -838,8 +838,9 @@ ffm_int ffm_save_model_plain_text(ffm_model& model, char const *path)
     }
 
     ptr = model.WL;
-    for(ffm_int j = 0; j < model.n; j++) {
+    for(ffm_int j = 0; j < model.n; j++, ptr++) {
         f_out << "wl," << j << " " << *ptr << "\n";
+		ptr += 1;
     }
     ptr = model.WB;
     f_out << "wb " << *ptr << "\n";
@@ -863,25 +864,45 @@ ffm_model ffm_load_model_map(string path) {
         if(f_in.eof())
             break;
         ffm_int comma = dummy.find(",");
-        ffm_int j = strtol(dummy.substr(1, comma-1).c_str(), NULL, 10);
-        //ffm_int f = strtol(dummy.substr(comma+1, dummy.size()-1).c_str(), NULL, 10);
-        ffm_float *W = malloc_aligned_float((ffm_long)model.m*k_aligned*2);
-        ffm_float *ptr = W;
-        model.W_map[j] = W;
-
-        for(int d=0;d<model.k;d++, ptr++) {
-            f_in >> *ptr;
+        if(dummy.find("wl")==0) {
+            ffm_int j = strtol(dummy.substr(comma+1, dummy.size()).c_str(), NULL, 10);
+            ffm_float *WL = new ffm_float[2];
+            ffm_float *ptr = WL;
+            model.WL_map[j] = WL;
+            for(int d=0;d<2;d++, ptr++) {
+                f_in >> *ptr;
+                d += 1;
+            }
         }
-        ptr += model.k;
+        else if(dummy.find("wb")==0) {
+            model.WB = new ffm_float[2];
+            ffm_float *ptr = model.WB;
+            for(int d=0;d<2;d++, ptr++) {
+                f_in >> *ptr;
+                d += 1;
+            }
+        }
+        else {
+            ffm_int j = strtol(dummy.substr(1, comma-1).c_str(), NULL, 10);
+            //ffm_int f = strtol(dummy.substr(comma+1, dummy.size()-1).c_str(), NULL, 10);
+            ffm_float *W = malloc_aligned_float((ffm_long)model.m*k_aligned*2);
+            ffm_float *ptr = W;
+            model.W_map[j] = W;
 
-        for(int i=1;i<model.m;i++) {
-            f_in >> dummy;
-            comma = dummy.find(",");
-            //f = strtol(dummy.substr(comma+1, dummy.size()-1).c_str(), NULL, 10);
             for(int d=0;d<model.k;d++, ptr++) {
                 f_in >> *ptr;
             }
             ptr += model.k;
+
+            for(int i=1;i<model.m;i++) {
+                f_in >> dummy;
+                comma = dummy.find(",");
+                //f = strtol(dummy.substr(comma+1, dummy.size()-1).c_str(), NULL, 10);
+                for(int d=0;d<model.k;d++, ptr++) {
+                    f_in >> *ptr;
+                }
+                ptr += model.k;
+            }
         }
     }
 
