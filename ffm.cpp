@@ -367,6 +367,9 @@ ffm_model init_model_map(ffm_int n, ffm_int m, ffm_parameter param, string tr_pa
     model.normalization = param.normalization;
 
     problem_on_disk prob(tr_path);
+    if (!param.ws_model_path.empty()) {
+		model = ffm_load_model_map(param.ws_model_path);
+	}
     for(int blk=0; blk < prob.meta.num_blocks; blk++) {
         ffm_int l = prob.load_block(blk);
         for(ffm_int i=0; i<l; i++) {
@@ -385,9 +388,11 @@ ffm_model init_model_map(ffm_int n, ffm_int m, ffm_parameter param, string tr_pa
         }
     }
 
-    model.WB = malloc_aligned_float((ffm_long)2);
-    model.WB[0] = 0;
-    model.WB[1] = 1;
+    if (param.ws_model_path.empty()) {
+		model.WB = malloc_aligned_float((ffm_long)2);
+		model.WB[0] = 0;
+		model.WB[1] = 1;
+	}
 
     return model;
 }
@@ -895,18 +900,39 @@ void ffm_save_model_map(ffm_model &model, string path) {
         for(int d=0;d<k_aligned;d++, ptr++) {
             f_out << *ptr << " ";
         }
+        for(int d=0;d<k_aligned;d++, ptr++) {
+            f_out << *ptr << " ";
+        }
         f_out << "\n";
-        ptr += model.k;
 
         for(int f=1;f<model.m;f++) {
             f_out << "w" << j << "," << f << " ";
             for(int d=0;d<k_aligned;d++, ptr++) {
                 f_out << *ptr << " ";
             }
+            for(int d=0;d<k_aligned;d++, ptr++) {
+                f_out << *ptr << " ";
+            }
             f_out << "\n";
-            ptr += model.k;
         }
     }
+
+    for(auto p:model.WL_map) {
+        ffm_int j = p.first;
+        ffm_float *W = p.second;
+        ffm_float *ptr = W;
+        f_out << "wl," << j << " ";
+		for(int d=0;d<2;d++, ptr++) {
+			f_out << *ptr << " ";
+		}
+		f_out << "\n";
+	}
+    ffm_float *ptr = model.WB;
+    f_out << "wb ";
+	for(int d=0;d<2;d++, ptr++) {
+		f_out << *ptr << " ";
+	}
+	f_out << "\n";
 }
 
 void ffm_save_model(ffm_model &model, string path) {
@@ -991,7 +1017,6 @@ ffm_model ffm_load_model_map(string path) {
             model.WL_map[j] = WL;
             for(int d=0;d<2;d++, ptr++) {
                 f_in >> *ptr;
-                d += 1;
             }
         }
         else if(dummy.find("wb")==0) {
@@ -999,7 +1024,6 @@ ffm_model ffm_load_model_map(string path) {
             ffm_float *ptr = model.WB;
             for(int d=0;d<2;d++, ptr++) {
                 f_in >> *ptr;
-                d += 1;
             }
         }
         else {
@@ -1012,7 +1036,9 @@ ffm_model ffm_load_model_map(string path) {
             for(int d=0;d<model.k;d++, ptr++) {
                 f_in >> *ptr;
             }
-            ptr += model.k;
+            for(int d=0;d<model.k;d++, ptr++) {
+                f_in >> *ptr;
+            }
 
             for(int i=1;i<model.m;i++) {
                 f_in >> dummy;
@@ -1021,7 +1047,9 @@ ffm_model ffm_load_model_map(string path) {
                 for(int d=0;d<model.k;d++, ptr++) {
                     f_in >> *ptr;
                 }
-                ptr += model.k;
+                for(int d=0;d<model.k;d++, ptr++) {
+                    f_in >> *ptr;
+                }
             }
         }
     }
