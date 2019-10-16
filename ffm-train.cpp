@@ -1,4 +1,4 @@
-#pragma GCC diagnostic ignored "-Wunused-result" 
+#pragma GCC diagnostic ignored "-Wunused-result"
 #include <algorithm>
 #include <cstring>
 #include <iostream>
@@ -26,6 +26,7 @@ string train_help() {
 "-t <iteration>: set number of iterations (default 15)\n"
 "-r <eta>: set learning rate (default 0.2)\n"
 "-s <nr_threads>: set number of threads (default 1)\n"
+"-m <ws_model_path>: set the warm-start model path\n"
 "-p <path>: set path to the validation set\n"
 "--quiet: quiet mode (no output)\n"
 "--no-norm: disable instance-wise normalization\n"
@@ -98,6 +99,9 @@ Option parse_option(int argc, char **argv) {
             opt.nr_threads = atoi(args[i].c_str());
             if(opt.nr_threads <= 0)
                 throw invalid_argument("number of threads should be greater than zero");
+        } else if(args[i].compare("-m") == 0) {
+            i++;
+            opt.param.ws_model_path = args[i];
         } else if(args[i].compare("-p") == 0) {
             if(i == argc-1)
                 throw invalid_argument("need to specify path after -p");

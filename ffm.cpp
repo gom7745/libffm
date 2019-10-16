@@ -264,32 +264,37 @@ ffm_float* malloc_aligned_float(ffm_long size)
 ffm_model init_model(ffm_int n, ffm_int m, ffm_parameter param)
 {
     ffm_model model;
-    model.n = n;
-    model.k = param.k;
-    model.m = m;
-    model.W = nullptr;
-    model.normalization = param.normalization;
+    if (param.ws_model_path.empty()) {
+        model.n = n;
+        model.k = param.k;
+        model.m = m;
+        model.W = nullptr;
+        model.normalization = param.normalization;
 
-    ffm_int k_aligned = get_k_aligned(model.k);
+        ffm_int k_aligned = get_k_aligned(model.k);
 
-    model.W = malloc_aligned_float((ffm_long)n*m*k_aligned*2);
+        model.W = malloc_aligned_float((ffm_long)n*m*k_aligned*2);
 
-    ffm_float coef = 1.0f / sqrt(model.k);
-    ffm_float *w = model.W;
+        ffm_float coef = 1.0f / sqrt(model.k);
+        ffm_float *w = model.W;
 
-    default_random_engine generator;
-    uniform_real_distribution<ffm_float> distribution(0.0, 1.0);
+        default_random_engine generator;
+        uniform_real_distribution<ffm_float> distribution(0.0, 1.0);
 
-    for(ffm_int j = 0; j < model.n; j++) {
-        for(ffm_int f = 0; f < model.m; f++) {
-            for(ffm_int d = 0; d < k_aligned;) {
-                for(ffm_int s = 0; s < kALIGN; s++, w++, d++) {
-                    w[0] = (d < model.k)? coef * distribution(generator) : 0.0;
-                    w[kALIGN] = 1;
+        for(ffm_int j = 0; j < model.n; j++) {
+            for(ffm_int f = 0; f < model.m; f++) {
+                for(ffm_int d = 0; d < k_aligned;) {
+                    for(ffm_int s = 0; s < kALIGN; s++, w++, d++) {
+                        w[0] = (d < model.k)? coef * distribution(generator) : 0.0;
+                        w[kALIGN] = 1;
+                    }
+                    w += kALIGN;
                 }
-                w += kALIGN;
             }
         }
+    }
+    else {
+        model =  ffm_load_model(param.ws_model_path);
     }
 
     return model;
@@ -498,6 +503,7 @@ bool check_same_txt_bin(string txt_path, string bin_path) {
 } // unnamed namespace
 
 ffm_model::~ffm_model() {
+    /*
     if(W != nullptr) {
 #ifndef USESSE
         free(W);
@@ -510,6 +516,7 @@ ffm_model::~ffm_model() {
 #endif
         W = nullptr;
     }
+    */
 }
 
 void ffm_read_problem_to_disk(string txt_path, string bin_path) {
@@ -683,7 +690,7 @@ ffm_int ffm_save_model_plain_text(ffm_model& model, char const *path)
     return 0;
 }
 
-ffm_model ffm_load_model(string path) {
+ffm_model ffm_load_model(string path, ffm_int new_n) {
     ifstream f_in(path, ios::in | ios::binary);
 
     ffm_model model;
@@ -692,16 +699,40 @@ ffm_model ffm_load_model(string path) {
     f_in.read(reinterpret_cast<char*>(&model.k), sizeof(ffm_int));
     f_in.read(reinterpret_cast<char*>(&model.normalization), sizeof(bool));
 
+    ffm_int old_n = model.n;
+    ffm_long w_size_old = get_w_size(model);
+    if(new_n > model.n)
+        model.n = new_n;
     ffm_long w_size = get_w_size(model);
     model.W = malloc_aligned_float(w_size);
     // f_in.read(reinterpret_cast<char*>(model.W), sizeof(ffm_float) * w_size);
     // Need to write chunk by chunk because some compiler use int32 and will overflow when w_size * 4 > MAX_INT
 
-    for(ffm_long offset = 0; offset < w_size; ) {
-        ffm_long next_offset = min(w_size, offset + (ffm_long) sizeof(ffm_float) * kCHUNK_SIZE);
+    for(ffm_long offset = 0; offset < w_size_old; ) {
+        ffm_long next_offset = min(w_size_old, offset + (ffm_long) sizeof(ffm_float) * kCHUNK_SIZE);
         ffm_long size = next_offset - offset;
         f_in.read(reinterpret_cast<char*>(model.W+offset), sizeof(ffm_float) * size);
         offset = next_offset;
+    }
+    if(new_n > old_n) {
+        ffm_float *w = model.W + w_size_old;
+
+        ffm_int k_aligned = get_k_aligned(model.k);
+        ffm_float coef = 1.0f / sqrt(model.k);
+        default_random_engine generator;
+        uniform_real_distribution<ffm_float> distribution(0.0, 1.0);
+
+        for(ffm_int j = old_n; j < model.n; j++) {
+            for(ffm_int f = 0; f < model.m; f++) {
+                for(ffm_int d = 0; d < k_aligned;) {
+                    for(ffm_int s = 0; s < kALIGN; s++, w++, d++) {
+                        w[0] = (d < model.k)? coef * distribution(generator) : 0.0;
+                        w[kALIGN] = 1;
+                    }
+                    w += kALIGN;
+                }
+            }
+        }
     }
 
     return model;
