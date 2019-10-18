@@ -130,10 +130,13 @@ inline ffm_float wTx(
         if(j1 >= model.n || f1 >= model.m)
             continue;
 
-        ffm_float *w1_head = nullptr;
-        ffm_float *wL = nullptr;
+        ffm_float *w1_head = nullptr, *wL = nullptr;
+		unordered_map<ffm_int, ffm_float *>::iterator w_it;
         if(model.use_map) {
-            w1_head = model.W_map[j1];
+			w_it = model.W_map.find(j1);
+			if(w_it == model.W_map.end())
+				continue;
+            w1_head = w_it->second;
             wL = model.WL_map[j1];
         }
         else
@@ -163,7 +166,10 @@ inline ffm_float wTx(
             ffm_float *w2_base;
             if(model.use_map) {
                 w1_base = w1_head + f2*align0;
-                w2_base = model.W_map[j2] + f1*align0;
+				w_it = model.W_map.find(j2);
+				if(w_it == model.W_map.end())
+					continue;
+                w2_base = w_it->second + f1*align0;
             }
             else {
                 w1_base = model.W + (ffm_long)j1*align1 + f2*align0;
