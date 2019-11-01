@@ -51,7 +51,7 @@ int main(int argc, char ** argv){
 
     ffm_model model =  ffm_load_model(option.model_path);
     string model_txt_path = option.model_path + ".txt";
-	ffm_save_model_plain_text(model, model_txt_path.c_str());
+	ffm_save_model_plain_text(model, model_txt_path);
 
     return 0;
 }

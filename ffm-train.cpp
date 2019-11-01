@@ -30,6 +30,8 @@ string train_help() {
 "-p <path>: set path to the validation set\n"
 "--auc: display auc on validation set (must be used with -p)\n "
 "--use-map: store weight as map\n"
+"--save-txt: save model as txt\n"
+"--load-txt: load model from txt\n"
 "--quiet: quiet mode (no output)\n"
 "--no-norm: disable instance-wise normalization\n"
 "--auto-stop: stop at the iteration that achieves the best validation loss (must be used with -p)\n");
@@ -113,6 +115,10 @@ Option parse_option(int argc, char **argv) {
             opt.param.do_auc = true;
         } else if(args[i].compare("--use-map") == 0) {
             opt.param.use_map = true;
+        } else if(args[i].compare("--save-txt") == 0) {
+            opt.param.save_txt = true;
+        } else if(args[i].compare("--load-txt") == 0) {
+            opt.param.load_txt = true;
         } else if(args[i].compare("--no-norm") == 0) {
             opt.param.normalization = false;
         } else if(args[i].compare("--quiet") == 0) {
@@ -151,10 +157,18 @@ int train_on_disk(Option opt) {
 
     ffm_model model = ffm_train_on_disk(tr_bin_path.c_str(), va_bin_path.c_str(), opt.param);
 
-    if(opt.param.use_map)
-        ffm_save_model_map(model, opt.model_path);
-    else
-        ffm_save_model(model, opt.model_path);
+    if(opt.param.save_txt) {
+        if(opt.param.use_map)
+            ffm_save_model_map_plain_text(model, opt.model_path);
+        else
+            ffm_save_model_plain_text(model, opt.model_path);
+    }
+    else {
+        if(opt.param.use_map)
+            ffm_save_model_map(model, opt.model_path);
+        else
+            ffm_save_model(model, opt.model_path);
+    }
 
     return 0;
 }

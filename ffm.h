@@ -43,9 +43,11 @@ struct ffm_parameter {
     ffm_int k = 4; // number of latent factors
     bool normalization = true;
     bool auto_stop = false;
-	bool do_auc = false;
+    bool do_auc = false;
     string ws_model_path;
     bool use_map = false;
+    bool save_txt = false;
+    bool load_txt = false;
 };
 
 struct disk_problem_meta {
@@ -54,7 +56,7 @@ struct disk_problem_meta {
     ffm_int l = 0;
     ffm_int num_blocks = 0;
     ffm_long B_pos = 0;
-	ffm_long nnz = 0;
+    ffm_long nnz = 0;
     uint64_t hash1;
     uint64_t hash2;
 };
@@ -85,26 +87,27 @@ void ffm_problem_info(problem_on_disk &prob, string &path);
 
 void ffm_read_problem_to_disk(string txt_path, string bin_path);
 
-void ffm_save_model(ffm_model &model, string path);
-
 void ffm_save_model_map(ffm_model &model, string path);
 
-ffm_int ffm_save_model_plain_text(ffm_model& model, char const *path);
+void ffm_save_model(ffm_model &model, string path);
+
+void ffm_save_model_map_plain_text(ffm_model &model, string path);
+
+ffm_int ffm_save_model_plain_text(ffm_model& model, string path);
 
 ffm_model ffm_load_model_map(string path);
 
-ffm_int ffm_save_model_plain_text(ffm_model& model, char const *path);
+ffm_model ffm_load_model_map_plain_text(string path);
 
 ffm_model ffm_load_model(string path, ffm_int new_n=0);
 
-ffm_model ffm_load_model_plain_txt(string path);
+ffm_model ffm_load_model_plain_text(string path);
 
 ffm_model ffm_train_on_disk(string Tr_path, string Va_path, ffm_parameter param);
 
 ffm_float ffm_predict(ffm_node *begin, ffm_node *end, ffm_model &model);
 
 ffm_float ffm_predict_on_disk(string te_path, ffm_model &model, vector<ffm_float>& va_scores, vector<ffm_float>& va_orders, vector<ffm_float>& va_labels, ffm_double subratio);
-
 } // namespace ffm
 
 #endif // _LIBFFM_H

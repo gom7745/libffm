@@ -113,7 +113,7 @@ inline ffm_float wTx(
 
     ffm_int align0 = 2 * get_k_aligned(model.k);
     ffm_int align1 = model.m * align0;
-	ffm_float sqrt_r = sqrt(r);
+    ffm_float sqrt_r = sqrt(r);
 
     __m128 XMMkappa = _mm_set1_ps(kappa);
     __m128 XMMeta = _mm_set1_ps(eta);
@@ -131,11 +131,11 @@ inline ffm_float wTx(
             continue;
 
         ffm_float *w1_head = nullptr, *wL = nullptr;
-		unordered_map<ffm_int, ffm_float *>::iterator w_it;
+        unordered_map<ffm_int, ffm_float *>::iterator w_it;
         if(model.use_map) {
-			w_it = model.W_map.find(j1);
-			if(w_it == model.W_map.end())
-				continue;
+            w_it = model.W_map.find(j1);
+            if(w_it == model.W_map.end())
+                continue;
             w1_head = w_it->second;
             wL = model.WL_map[j1];
         }
@@ -166,9 +166,9 @@ inline ffm_float wTx(
             ffm_float *w2_base;
             if(model.use_map) {
                 w1_base = w1_head + f2*align0;
-				w_it = model.W_map.find(j2);
-				if(w_it == model.W_map.end())
-					continue;
+                w_it = model.W_map.find(j2);
+                if(w_it == model.W_map.end())
+                    continue;
                 w2_base = w_it->second + f1*align0;
             }
             else {
@@ -232,7 +232,7 @@ inline ffm_float wTx(
         }
     }
 
-	ffm_float &wb = model.WB[0];
+    ffm_float &wb = model.WB[0];
     if(do_update)
     {
         ffm_float &wbg = model.WB[1];
@@ -250,7 +250,7 @@ inline ffm_float wTx(
 
     XMMt = _mm_hadd_ps(XMMt, XMMt);
     XMMt = _mm_hadd_ps(XMMt, XMMt);
-	ffm_float t_sse;
+    ffm_float t_sse;
     _mm_store_ss(&t_sse, XMMt);
 
     return t + t_sse;
@@ -270,7 +270,7 @@ inline ffm_float wTx(
 
     ffm_int align0 = 2 * get_k_aligned(model.k);
     ffm_int align1 = model.m * align0;
-	ffm_float sqrt_r = sqrt(r);
+    ffm_float sqrt_r = sqrt(r);
 
     ffm_float t = 0;
     for(ffm_node *N1 = begin; N1 != end; N1++) {
@@ -280,7 +280,7 @@ inline ffm_float wTx(
         if(j1 >= model.n || f1 >= model.m)
             continue;
 
-		ffm_float &wl = model.WL[j1 * 2];
+        ffm_float &wl = model.WL[j1 * 2];
         if(do_update)
         {
             ffm_float &wlg = model.WL[j1 * 2 + 1 ];
@@ -326,7 +326,7 @@ inline ffm_float wTx(
         }
     }
 
-	ffm_float &wb = model.WB[0];
+    ffm_float &wb = model.WB[0];
     if(do_update)
     {
         ffm_float &wbg = model.WB[1];
@@ -374,8 +374,11 @@ ffm_model init_model_map(ffm_int n, ffm_int m, ffm_parameter param, string tr_pa
 
     problem_on_disk prob(tr_path);
     if (!param.ws_model_path.empty()) {
-		model = ffm_load_model_map(param.ws_model_path);
-	}
+        if(param.load_txt)
+            model = ffm_load_model_map_plain_text(param.ws_model_path);
+        else
+            model = ffm_load_model_map(param.ws_model_path);
+    }
     for(int blk=0; blk < prob.meta.num_blocks; blk++) {
         ffm_int l = prob.load_block(blk);
         for(ffm_int i=0; i<l; i++) {
@@ -383,22 +386,22 @@ ffm_model init_model_map(ffm_int n, ffm_int m, ffm_parameter param, string tr_pa
             ffm_node *end = &prob.X[prob.P[i+1]];
             for(ffm_node *N=begin;N!=end;N++) {
                 ffm_int j = N->j;
-                if(model.W_map.find(j)==model.W_map.end())
+                if(model.W_map.find(j)==model.W_map.end()) {
                     model.W_map[j] = init_field(model);
-					if(model.WL_map.find(j)==model.WL_map.end()) {
-						ffm_float *WL = new ffm_float[2];
-						WL[0] = 0; WL[1] = 1;
-						model.WL_map[j] = WL;
-					}
+                    ffm_float *WL = new ffm_float[2];
+                    WL[0] = 0; WL[1] = 1;
+                    model.WL_map[j] = WL;
+                }
             }
         }
     }
+    model.n = model.W_map.size();
 
     if (param.ws_model_path.empty()) {
-		model.WB = malloc_aligned_float((ffm_long)2);
-		model.WB[0] = 0;
-		model.WB[1] = 1;
-	}
+        model.WB = malloc_aligned_float((ffm_long)2);
+        model.WB[0] = 0;
+        model.WB[1] = 1;
+    }
 
     return model;
 }
@@ -416,8 +419,8 @@ ffm_model init_model(ffm_int n, ffm_int m, ffm_parameter param)
         ffm_int k_aligned = get_k_aligned(model.k);
 
         model.W = malloc_aligned_float((ffm_long)n*m*k_aligned*2);
-		model.WL = malloc_aligned_float((ffm_long)n*2);
-		model.WB = malloc_aligned_float((ffm_long)2);
+        model.WL = malloc_aligned_float((ffm_long)n*2);
+        model.WB = malloc_aligned_float((ffm_long)2);
 
         ffm_float coef = 1.0f / sqrt(model.k);
         ffm_float *w = model.W;
@@ -886,6 +889,28 @@ ffm_model ffm_train_on_disk(string tr_path, string va_path, ffm_parameter param)
 }
 
 void ffm_save_model_map(ffm_model &model, string path) {
+    ofstream f_out(path, ios::out | ios::binary);
+    f_out.write(reinterpret_cast<char*>(&model.n), sizeof(ffm_int));
+    f_out.write(reinterpret_cast<char*>(&model.m), sizeof(ffm_int));
+    f_out.write(reinterpret_cast<char*>(&model.k), sizeof(ffm_int));
+    f_out.write(reinterpret_cast<char*>(&model.normalization), sizeof(bool));
+
+    ffm_int k_aligned = get_k_aligned(model.k);
+
+    for(auto p:model.W_map) {
+        ffm_long j = p.first;
+        f_out.write(reinterpret_cast<char*>(&j), sizeof(ffm_long));
+        f_out.write(reinterpret_cast<char*>(p.second), sizeof(ffm_float) * model.m*k_aligned*2);
+    }
+    for(auto p:model.WL_map) {
+        ffm_long j = p.first;
+        f_out.write(reinterpret_cast<char*>(&j), sizeof(ffm_long));
+        f_out.write(reinterpret_cast<char*>(p.second), sizeof(ffm_float) * 2);
+    }
+    f_out.write(reinterpret_cast<char*>(model.WB), sizeof(ffm_float) * 2);
+}
+
+void ffm_save_model_map_plain_text(ffm_model &model, string path) {
     ofstream f_out(path);
     if(!f_out.is_open())
         return;
@@ -928,17 +953,17 @@ void ffm_save_model_map(ffm_model &model, string path) {
         ffm_float *W = p.second;
         ffm_float *ptr = W;
         f_out << "wl," << j << " ";
-		for(int d=0;d<2;d++, ptr++) {
-			f_out << *ptr << " ";
-		}
-		f_out << "\n";
-	}
+        for(int d=0;d<2;d++, ptr++) {
+            f_out << *ptr << " ";
+        }
+        f_out << "\n";
+    }
     ffm_float *ptr = model.WB;
     f_out << "wb ";
-	for(int d=0;d<2;d++, ptr++) {
-		f_out << *ptr << " ";
-	}
-	f_out << "\n";
+    for(int d=0;d<2;d++, ptr++) {
+        f_out << *ptr << " ";
+    }
+    f_out << "\n";
 }
 
 void ffm_save_model(ffm_model &model, string path) {
@@ -964,10 +989,10 @@ void ffm_save_model(ffm_model &model, string path) {
         f_out.write(reinterpret_cast<char*>(model.WL+offset), sizeof(ffm_float) * size);
         offset = next_offset;
     }
-	f_out.write(reinterpret_cast<char*>(model.WB), sizeof(ffm_float) * 2);
+    f_out.write(reinterpret_cast<char*>(model.WB), sizeof(ffm_float) * 2);
 }
 
-ffm_int ffm_save_model_plain_text(ffm_model& model, char const *path)
+ffm_int ffm_save_model_plain_text(ffm_model& model, string path)
 {
     ofstream f_out(path);
     if(!f_out.is_open())
@@ -978,29 +1003,38 @@ ffm_int ffm_save_model_plain_text(ffm_model& model, char const *path)
     f_out << "k " << model.k << "\n";
     f_out << "normalization " << model.normalization << "\n";
 
+    ffm_int k_aligned = get_k_aligned(model.k);
     ffm_float *ptr = model.W;
     for(ffm_int j = 0; j < model.n; j++) {
         for(ffm_int f = 0; f < model.m; f++) {
             f_out << "w" << j << "," << f << " ";
-            for(ffm_int d = 0; d < model.k; d++, ptr++)
+            for(ffm_int d = 0; d < k_aligned; d++, ptr++)
+                f_out << *ptr << " ";
+            for(ffm_int d = 0; d < k_aligned; d++, ptr++)
                 f_out << *ptr << " ";
             f_out << "\n";
-            ptr += model.k;
         }
     }
 
     ptr = model.WL;
-    for(ffm_int j = 0; j < model.n; j++, ptr++) {
-        f_out << "wl," << j << " " << *ptr << "\n";
-		ptr += 1;
+    for(ffm_int j = 0; j < model.n; j++) {
+        f_out << "wl," << j << " ";
+        for(int d=0;d<2;d++, ptr++) {
+            f_out << *ptr << " ";
+        }
+        f_out << "\n";
     }
     ptr = model.WB;
-    f_out << "wb " << *ptr << "\n";
+    f_out << "wb ";
+    for(int d=0;d<2;d++, ptr++) {
+        f_out << *ptr << " ";
+    }
+    f_out << "\n";
 
     return 0;
 }
 
-ffm_model ffm_load_model_map(string path) {
+ffm_model ffm_load_model_map_plain_text(string path) {
     ifstream f_in(path);
     ffm_model model;
 
@@ -1011,54 +1045,82 @@ ffm_model ffm_load_model_map(string path) {
     f_in >> dummy >> model.normalization;
     ffm_int k_aligned = get_k_aligned(model.k);
 
-    while(true) {
+    for(int i = 0;i<model.n;i++) {
         f_in >> dummy;
-        if(f_in.eof())
-            break;
         ffm_int comma = dummy.find(",");
-        if(dummy.find("wl")==0) {
-            ffm_int j = strtol(dummy.substr(comma+1, dummy.size()).c_str(), NULL, 10);
-            ffm_float *WL = new ffm_float[2];
-            ffm_float *ptr = WL;
-            model.WL_map[j] = WL;
-            for(int d=0;d<2;d++, ptr++) {
-                f_in >> *ptr;
-            }
-        }
-        else if(dummy.find("wb")==0) {
-            model.WB = new ffm_float[2];
-            ffm_float *ptr = model.WB;
-            for(int d=0;d<2;d++, ptr++) {
-                f_in >> *ptr;
-            }
-        }
-        else {
-            ffm_int j = strtol(dummy.substr(1, comma-1).c_str(), NULL, 10);
-            //ffm_int f = strtol(dummy.substr(comma+1, dummy.size()-1).c_str(), NULL, 10);
-            ffm_float *W = malloc_aligned_float((ffm_long)model.m*k_aligned*2);
-            ffm_float *ptr = W;
-            model.W_map[j] = W;
+        ffm_int j = strtol(dummy.substr(1, comma-1).c_str(), NULL, 10);
+        //ffm_int f = strtol(dummy.substr(comma+1, dummy.size()-1).c_str(), NULL, 10);
+        ffm_float *W = malloc_aligned_float((ffm_long)model.m*k_aligned*2);
+        ffm_float *ptr = W;
+        model.W_map[j] = W;
 
+        for(int d=0;d<model.k;d++, ptr++) {
+            f_in >> *ptr;
+        }
+        for(int d=0;d<model.k;d++, ptr++) {
+            f_in >> *ptr;
+        }
+
+        for(int i=1;i<model.m;i++) {
+            f_in >> dummy;
+            comma = dummy.find(",");
+            //f = strtol(dummy.substr(comma+1, dummy.size()-1).c_str(), NULL, 10);
             for(int d=0;d<model.k;d++, ptr++) {
                 f_in >> *ptr;
             }
             for(int d=0;d<model.k;d++, ptr++) {
                 f_in >> *ptr;
-            }
-
-            for(int i=1;i<model.m;i++) {
-                f_in >> dummy;
-                comma = dummy.find(",");
-                //f = strtol(dummy.substr(comma+1, dummy.size()-1).c_str(), NULL, 10);
-                for(int d=0;d<model.k;d++, ptr++) {
-                    f_in >> *ptr;
-                }
-                for(int d=0;d<model.k;d++, ptr++) {
-                    f_in >> *ptr;
-                }
             }
         }
     }
+
+    for(int i = 0;i<model.n;i++) {
+        f_in >> dummy;
+        ffm_int comma = dummy.find(",");
+        ffm_int j = strtol(dummy.substr(comma+1, dummy.size()).c_str(), NULL, 10);
+        ffm_float *WL = new ffm_float[2];
+        ffm_float *ptr = WL;
+        model.WL_map[j] = WL;
+        for(int d=0;d<2;d++, ptr++) {
+            f_in >> *ptr;
+        }
+    }
+
+    model.WB = new ffm_float[2];
+    ffm_float *ptr = model.WB;
+    for(int d=0;d<2;d++, ptr++) {
+        f_in >> *ptr;
+    }
+
+    return model;
+}
+
+ffm_model ffm_load_model_map(string path) {
+    ifstream f_in(path, ios::in | ios::binary);
+
+    ffm_model model;
+    f_in.read(reinterpret_cast<char*>(&model.n), sizeof(ffm_int));
+    f_in.read(reinterpret_cast<char*>(&model.m), sizeof(ffm_int));
+    f_in.read(reinterpret_cast<char*>(&model.k), sizeof(ffm_int));
+    f_in.read(reinterpret_cast<char*>(&model.normalization), sizeof(bool));
+
+    ffm_int k_aligned = get_k_aligned(model.k);
+    for(int i = 0;i<model.n;i++) {
+        ffm_long j = 0;
+        ffm_float *W = malloc_aligned_float((ffm_long)model.m*k_aligned*2);
+        f_in.read(reinterpret_cast<char*>(&j), sizeof(ffm_long));
+        f_in.read(reinterpret_cast<char*>(W), sizeof(ffm_float) * model.m*k_aligned*2);
+        model.W_map[j] = W;
+    }
+    for(int i = 0;i<model.n;i++) {
+        ffm_long j = 0;
+        ffm_float *WL = malloc_aligned_float((ffm_long)2);
+        f_in.read(reinterpret_cast<char*>(&j), sizeof(ffm_long));
+        f_in.read(reinterpret_cast<char*>(WL), sizeof(ffm_float) * 2);
+        model.WL_map[j] = WL;
+    }
+    model.WB = new ffm_float[2];
+    f_in.read(reinterpret_cast<char*>(model.WB), sizeof(ffm_float) * 2);
 
     return model;
 }
@@ -1096,7 +1158,7 @@ ffm_model ffm_load_model(string path, ffm_int new_n) {
         f_in.read(reinterpret_cast<char*>(model.WL+offset), sizeof(ffm_float) * size);
         offset = next_offset;
     }
-	f_in.read(reinterpret_cast<char*>(model.WB), sizeof(ffm_float) * 2);
+    f_in.read(reinterpret_cast<char*>(model.WB), sizeof(ffm_float) * 2);
     if(new_n > old_n) {
         ffm_float *w = model.W + w_size_old;
         ffm_float *wl = model.WL + old_n;
@@ -1124,7 +1186,7 @@ ffm_model ffm_load_model(string path, ffm_int new_n) {
     return model;
 }
 
-ffm_model ffm_load_model_plain_txt(string path) {
+ffm_model ffm_load_model_plain_text(string path) {
     ifstream f_in(path);
     ffm_model model;
 
@@ -1135,15 +1197,32 @@ ffm_model ffm_load_model_plain_txt(string path) {
     f_in >> dummy >> model.normalization;
     ffm_long w_size = get_w_size(model);
     model.W = malloc_aligned_float(w_size);
+    model.WL = malloc_aligned_float(model.n*2);
+    model.WB = malloc_aligned_float(2);
 
+    ffm_int k_aligned = get_k_aligned(model.k);
     ffm_float *ptr = model.W;
     for(ffm_int j = 0; j < model.n; j++) {
         for(ffm_int f = 0; f < model.m; f++) {
             f_in >> dummy;
-            for(ffm_int d = 0; d < model.k; d++, ptr++)
+            for(ffm_int d = 0; d < k_aligned; d++, ptr++)
                 f_in >> *ptr;
-            ptr += model.k;
+            for(ffm_int d = 0; d < k_aligned; d++, ptr++)
+                f_in >> *ptr;
         }
+    }
+
+    ptr = model.WL;
+    for(int j = 0;j<model.n;j++) {
+        f_in >> dummy;
+        for(int d=0;d<2;d++, ptr++) {
+            f_in >> *ptr;
+        }
+    }
+
+    ptr = model.WB;
+    for(int d=0;d<2;d++, ptr++) {
+        f_in >> *ptr;
     }
 
     return model;
@@ -1164,43 +1243,43 @@ ffm_float ffm_predict(ffm_node *begin, ffm_node *end, ffm_model &model) {
 }
 
 ffm_float ffm_predict_on_disk(string te_path, ffm_model &model, vector<ffm_float>& va_scores, vector<ffm_float>& va_orders, vector<ffm_float>& va_labels, ffm_double subratio) {
-		problem_on_disk te(te_path);
+        problem_on_disk te(te_path);
 
-		ffm_float loss = 0;
+        ffm_float loss = 0;
 
-		ffm_int l = te.meta.l;
-		ffm_int global_i = 0;
-		va_labels.resize(l, 0), va_scores.resize(l, 0), va_orders.resize(l, 0);
-		vector<ffm_int> outer_order(te.meta.num_blocks);
-		iota(outer_order.begin(), outer_order.end(), 0);
-		for(auto blk:outer_order){
-			ffm_int ll = te.load_block(blk);
-			vector<ffm_int> inner_oder(ll);
-			iota(inner_oder.begin(), inner_oder.end(),0);
+        ffm_int l = te.meta.l;
+        ffm_int global_i = 0;
+        va_labels.resize(l, 0), va_scores.resize(l, 0), va_orders.resize(l, 0);
+        vector<ffm_int> outer_order(te.meta.num_blocks);
+        iota(outer_order.begin(), outer_order.end(), 0);
+        for(auto blk:outer_order){
+            ffm_int ll = te.load_block(blk);
+            vector<ffm_int> inner_oder(ll);
+            iota(inner_oder.begin(), inner_oder.end(),0);
 #if defined USEOMP
 #pragma omp parallel for schedule(static) reduction(+:loss)
 #endif
-			for(ffm_int ii = 0; ii < ll; ii++){
-				ffm_int i = inner_oder[ii];
-				//timer.tic();
-				ffm_float y = te.Y[i];
-				ffm_node *begin = &te.X[te.P[i]];
-				ffm_node *end = &te.X[te.P[i+1]];
-				ffm_float r = model.normalization ? te.R[i] : 1;
-				ffm_float t = wTx(begin,end,r,model, 0, 0, 0, false);
+            for(ffm_int ii = 0; ii < ll; ii++){
+                ffm_int i = inner_oder[ii];
+                //timer.tic();
+                ffm_float y = te.Y[i];
+                ffm_node *begin = &te.X[te.P[i]];
+                ffm_node *end = &te.X[te.P[i+1]];
+                ffm_float r = model.normalization ? te.R[i] : 1;
+                ffm_float t = wTx(begin,end,r,model, 0, 0, 0, false);
                 t += log(subratio);
-				ffm_float expnyt = exp(-y*t);
-				loss += log1p(expnyt);
-				va_scores[global_i+i] = t;
-				va_orders[global_i+i] = global_i+i;
-				va_labels[global_i+i] = y;
-				//timer.toc();
-				//cout<<"one instance:"<<timer.get()<<endl;
-			}
-			global_i += ll;
-		}
+                ffm_float expnyt = exp(-y*t);
+                loss += log1p(expnyt);
+                va_scores[global_i+i] = t;
+                va_orders[global_i+i] = global_i+i;
+                va_labels[global_i+i] = y;
+                //timer.toc();
+                //cout<<"one instance:"<<timer.get()<<endl;
+            }
+            global_i += ll;
+        }
 
 
-		return loss/te.meta.l;
-	}
+        return loss/te.meta.l;
+    }
 } // namespace ffm

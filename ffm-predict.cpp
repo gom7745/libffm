@@ -21,6 +21,7 @@ struct Option {
     ffm_int nr_threads = 1;
     ffm_double subratio = 1;
     ffm_parameter param;
+    bool no_out = false;
 };
 
 string basename(string path){
@@ -40,8 +41,10 @@ string predict_help(){
             "options:\n"
             "-s <nr_threads>:set number of threads (default 1)\n"
             "-bd <bin data directory> set directory to the binary data\n"
-			"-sr <subratio>: set subratio for validation\n"
+            "-sr <subratio>: set subratio for validation\n"
             "--use-map: store weight as map\n"
+            "--load-txt: load model from txt\n"
+            "--no-out: predict without output\n"
     );
 }
 
@@ -65,13 +68,17 @@ Option parse_option(int argc, char **argv){
             opt.nr_threads = atoi(args[i].c_str());
             if (opt.nr_threads <= 0)
                 throw invalid_argument("number of threads should be greater than zero");
+        } else if(args[i].compare("--no-out") == 0) {
+            opt.no_out = true;
         } else if(args[i].compare("--use-map") == 0) {
             opt.param.use_map = true;
+        } else if(args[i].compare("--load-txt") == 0) {
+            opt.param.load_txt = true;
         } else if(args[i].compare("-bd") == 0) {
-			if(i == argc - 1)
+            if(i == argc - 1)
                 throw invalid_argument("need to specify validation path after -bd");
-			i++;
-			opt.b_dir = args[i];
+            i++;
+            opt.b_dir = args[i];
         } else if(args[i].compare("-sr") == 0) {
             if(i == argc-1)
                 throw invalid_argument("need to specify subratio after -sr");
@@ -79,17 +86,20 @@ Option parse_option(int argc, char **argv){
             opt.subratio = atof(args[i].c_str());
             if(opt.subratio < 0 || opt.subratio > 1)
                 throw invalid_argument("subratio should be between zero and one");
-		} else {
+        } else {
             break;
         }
     }
 
-    if (i != argc - 3)
+    if (i != argc - 3 and !opt.no_out)
+        throw invalid_argument("cannot parse command\n");
+    else if (opt.no_out and i != argc - 2)
         throw invalid_argument("cannot parse command\n");
 
     opt.test_path = string(args[i++]);
     opt.model_path = string(args[i++]);
-    opt.output_path = string(args[i++]);
+    if (!opt.no_out)
+        opt.output_path = string(args[i++]);
 
     return opt;
 }
@@ -99,23 +109,32 @@ void predict_on_disk(Option opt) {
     ffm_read_problem_to_disk(opt.test_path, te_bin_path);
     ffm_model model;
     if(opt.param.use_map) {
-        model = ffm_load_model_map(opt.model_path);
+        if(opt.param.load_txt)
+            model = ffm_load_model_map_plain_text(opt.model_path);
+        else
+            model = ffm_load_model_map(opt.model_path);
         model.use_map = opt.param.use_map;
     }
-    else
-        model =  ffm_load_model(opt.model_path);
-	vector<ffm_float> va_labels, va_scores, va_orders;
+    else {
+        if(opt.param.load_txt)
+            model = ffm_load_model_plain_text(opt.model_path);
+        else
+            model =  ffm_load_model(opt.model_path);
+    }
+    vector<ffm_float> va_labels, va_scores, va_orders;
     Timer timer;
     ffm_float va_logloss = ffm_predict_on_disk(te_bin_path,  model, va_scores, va_orders, va_labels, opt.subratio);
-    ofstream f_out(opt.output_path);
-	for(ffm_float y_bar: va_scores) {
-		ffm_float expnyt = exp(-y_bar);
-        f_out<<1/(1+expnyt)<<"\n";
-	}
-	ffm_float va_auc = cal_auc(va_orders, va_scores, va_labels);
+    if(!opt.no_out) {
+        ofstream f_out(opt.output_path);
+        for(ffm_float y_bar: va_scores) {
+            ffm_float expnyt = exp(-y_bar);
+            f_out<<1/(1+expnyt)<<"\n";
+        }
+    }
+    ffm_float va_auc = cal_auc(va_orders, va_scores, va_labels);
     cout << "logloss = "<< fixed << setprecision(5)<< va_logloss << endl;
     cout << "auc = "<< fixed << setprecision(5)<< va_auc << endl;
-	cout << "predict time = " << timer.get() << endl;
+    cout << "predict time = " << timer.get() << endl;
 }
 
 void predict(string test_path, string model_path, string output_path) {
@@ -175,7 +194,7 @@ int main(int argc, char **argv) {
     }
 
     //predict(option.test_path, option.model_path, option.output_path);
-	predict_on_disk(option);
+    predict_on_disk(option);
 
     return 0;
 }
