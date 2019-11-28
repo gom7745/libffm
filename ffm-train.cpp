@@ -28,6 +28,7 @@ string train_help() {
 "-s <nr_threads>: set number of threads (default 1)\n"
 "-m <ws_model_path>: set the warm-start model path\n"
 "-p <path>: set path to the validation set\n"
+"--auc: display auc on validation set (must be used with -p)\n "
 "--quiet: quiet mode (no output)\n"
 "--no-norm: disable instance-wise normalization\n"
 "--auto-stop: stop at the iteration that achieves the best validation loss (must be used with -p)\n");
@@ -107,6 +108,8 @@ Option parse_option(int argc, char **argv) {
                 throw invalid_argument("need to specify path after -p");
             i++;
             opt.va_path = args[i];
+        } else if(args[i].compare("--auc") == 0) {
+            opt.param.do_auc = true;
         } else if(args[i].compare("--no-norm") == 0) {
             opt.param.normalization = false;
         } else if(args[i].compare("--quiet") == 0) {
@@ -162,9 +165,15 @@ int main(int argc, char **argv) {
     if(opt.quiet)
         cout.setstate(ios_base::badbit);
 
-    if(opt.param.auto_stop && opt.va_path.empty()) {
-        cout << "To use auto-stop, you need to assign a validation set" << endl;
-        return 1;
+    if(opt.va_path.empty()) {
+		if(opt.param.auto_stop) {
+			cout << "To use auto-stop, you need to assign a validation set" << endl;
+			return 1;
+		}
+		if(opt.param.do_auc) {
+			cout << "To display auc, you need to assign a validation set" << endl;
+			return 1;
+		}
     }
 
 #if defined USEOMP

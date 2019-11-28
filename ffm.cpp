@@ -23,7 +23,6 @@ v: Value of each element in the problem
 #include <cmath>
 #include <iostream>
 #include <iomanip>
-#include <fstream>
 #include <new>
 #include <memory>
 #include <random>
@@ -300,66 +299,6 @@ ffm_model init_model(ffm_int n, ffm_int m, ffm_parameter param)
     return model;
 }
 
-struct disk_problem_meta {
-    ffm_int n = 0;
-    ffm_int m = 0;
-    ffm_int l = 0;
-    ffm_int num_blocks = 0;
-    ffm_long B_pos = 0;
-    uint64_t hash1;
-    uint64_t hash2;
-};
-
-struct problem_on_disk {
-    disk_problem_meta meta;
-    vector<ffm_float> Y;
-    vector<ffm_float> R;
-    vector<ffm_long> P;
-    vector<ffm_node> X;
-    vector<ffm_long> B;
-
-    problem_on_disk(string path) {
-        f.open(path, ios::in | ios::binary);
-        if(f.good()) {
-            f.read(reinterpret_cast<char*>(&meta), sizeof(disk_problem_meta));
-            f.seekg(meta.B_pos);
-            B.resize(meta.num_blocks);
-            f.read(reinterpret_cast<char*>(B.data()), sizeof(ffm_long) * meta.num_blocks);
-        }
-    }
-
-    int load_block(int block_index) {
-        if(block_index >= meta.num_blocks)
-            assert(false);
-
-        f.seekg(B[block_index]);
-
-        ffm_int l;
-        f.read(reinterpret_cast<char*>(&l), sizeof(ffm_int));
-
-        Y.resize(l);
-        f.read(reinterpret_cast<char*>(Y.data()), sizeof(ffm_float) * l);
-
-        R.resize(l);
-        f.read(reinterpret_cast<char*>(R.data()), sizeof(ffm_float) * l);
-
-        P.resize(l+1);
-        f.read(reinterpret_cast<char*>(P.data()), sizeof(ffm_long) * (l+1));
-
-        X.resize(P[l]);
-        f.read(reinterpret_cast<char*>(X.data()), sizeof(ffm_node) * P[l]);
-
-        return l;
-    }
-
-    bool is_empty() {
-        return meta.l == 0;
-    }
-
-private:
-    ifstream f;
-};
-
 uint64_t hashfile(string txt_path, bool one_block=false)
 {
     ifstream f(txt_path, ios::ate | ios::binary);
@@ -468,9 +407,12 @@ void txt2bin(string txt_path, string bin_path) {
         R.push_back(scale);
         P.push_back(p);
 
-        if(X.size() > (size_t)kCHUNK_SIZE)
+        if(X.size() > (size_t)kCHUNK_SIZE) {
+            meta.nnz += P[Y.size()];
             write_chunk();
+        }
     }
+    meta.nnz += P[Y.size()];
     write_chunk();
     write_chunk(); // write a dummy empty chunk in order to know where the EOF is
     assert(meta.num_blocks == (ffm_int)B.size());
@@ -501,6 +443,82 @@ bool check_same_txt_bin(string txt_path, string bin_path) {
 }
 
 } // unnamed namespace
+
+ffm_float cal_auc(vector<ffm_float>& va_orders, vector<ffm_float>& va_scores, vector<ffm_float>& va_labels) {
+	sort(va_orders.begin(), va_orders.end(), [&va_scores] (ffm_int i, ffm_int j) {return va_scores[i] < va_scores[j];});
+
+	ffm_float prev_score = va_scores[0];
+	ffm_long M = 0, N = 0;
+	ffm_long begin = 0, stuck_pos = 0, stuck_neg = 0;
+	ffm_float sum_pos_rank = 0;
+	ffm_int l = va_orders.size();
+	for (ffm_int i = 0; i < l; i++)
+	{
+		ffm_int sorted_i = va_orders[i];
+
+		ffm_float score = va_scores[sorted_i];
+		if (score != prev_score)
+		{
+			sum_pos_rank += stuck_pos*(begin+begin-1+stuck_pos+stuck_neg)*0.5;
+			prev_score = score;
+			begin = i;
+			stuck_neg = 0;
+			stuck_pos = 0;
+		}
+
+		ffm_float label = va_labels[sorted_i];
+		//printf("%lf %lf\n", score, label);
+
+		if (label > 0)
+		{
+			M++;
+			stuck_pos ++;
+		}
+		else
+		{
+			N++;
+			stuck_neg ++;
+		}
+	}
+	sum_pos_rank += stuck_pos*(begin+begin-1+stuck_pos+stuck_neg)*0.5;
+	ffm_float va_auc = (sum_pos_rank - 0.5*M*(M+1)) / (M*N);
+
+	return va_auc;
+}
+
+problem_on_disk::problem_on_disk(string path) {
+    f.open(path, ios::in | ios::binary);
+    if(f.good()) {
+        f.read(reinterpret_cast<char*>(&meta), sizeof(disk_problem_meta));
+        f.seekg(meta.B_pos);
+        B.resize(meta.num_blocks);
+        f.read(reinterpret_cast<char*>(B.data()), sizeof(ffm_long) * meta.num_blocks);
+    }
+}
+
+int problem_on_disk::load_block(int block_index) {
+    if(block_index >= meta.num_blocks)
+        assert(false);
+
+    f.seekg(B[block_index]);
+
+    ffm_int l;
+    f.read(reinterpret_cast<char*>(&l), sizeof(ffm_int));
+
+    Y.resize(l);
+    f.read(reinterpret_cast<char*>(Y.data()), sizeof(ffm_float) * l);
+
+    R.resize(l);
+    f.read(reinterpret_cast<char*>(R.data()), sizeof(ffm_float) * l);
+
+    P.resize(l+1);
+    f.read(reinterpret_cast<char*>(P.data()), sizeof(ffm_long) * (l+1));
+
+    X.resize(P[l]);
+    f.read(reinterpret_cast<char*>(X.data()), sizeof(ffm_node) * P[l]);
+
+    return l;
+}
 
 ffm_model::~ffm_model() {
     /*
@@ -536,10 +554,19 @@ void ffm_read_problem_to_disk(string txt_path, string bin_path) {
     }
 }
 
+void ffm_problem_info(problem_on_disk &prob, string &path) {
+    cout << "Data: " << path << " #features: " <<  prob.meta.n << " #fields: " << prob.meta.m << " #instances: " << prob.meta.l <<
+            " #block: " << prob.meta.num_blocks << " #nnz: " << prob.meta.nnz << endl;
+}
+
 ffm_model ffm_train_on_disk(string tr_path, string va_path, ffm_parameter param) {
 
     problem_on_disk tr(tr_path);
     problem_on_disk va(va_path);
+    cout << "Tr_data: ";
+	ffm_problem_info(tr, tr_path);
+    cout << "va_data: ";
+	ffm_problem_info(va, va_path);
 
     ffm_model model = init_model(tr.meta.n, tr.meta.m, param);
 
@@ -555,21 +582,32 @@ ffm_model ffm_train_on_disk(string tr_path, string va_path, ffm_parameter param)
     cout << "iter";
     cout.width(13);
     cout << "tr_logloss";
+    cout.width(13);
+    cout << "tr_time";
     if(!va_path.empty())
     {
         cout.width(13);
         cout << "va_logloss";
+        if(param.do_auc) {
+            cout.width(13);
+            cout << "va_auc";
+        }
+        cout.width(13);
+        cout << "va_time";
     }
-    cout.width(13);
-    cout << "tr_time";
     cout << endl;
 
     Timer timer;
 
+	vector<ffm_float> va_labels, va_scores, va_orders;
+    if (param.do_auc) {
+		va_labels.resize(va.meta.l, 0), va_scores.resize(va.meta.l, 0), va_orders.resize(va.meta.l, 0);
+    }
     auto one_epoch = [&] (problem_on_disk &prob, bool do_update) {
 
         ffm_double loss = 0;
 
+		ffm_int global_i = 0;
         vector<ffm_int> outer_order(prob.meta.num_blocks);
         iota(outer_order.begin(), outer_order.end(), 0);
         random_shuffle(outer_order.begin(), outer_order.end());
@@ -599,6 +637,12 @@ ffm_model ffm_train_on_disk(string tr_path, string va_path, ffm_parameter param)
                 ffm_double expnyt = exp(-y*t);
 
                 loss += log1p(expnyt);
+                if(param.do_auc) {
+                    va_scores[global_i+i] = t;
+                    va_orders[global_i+i] = global_i+i;
+                    va_labels[global_i+i] = y;
+
+                }
 
                 if(do_update) {
 
@@ -607,6 +651,7 @@ ffm_model ffm_train_on_disk(string tr_path, string va_path, ffm_parameter param)
                     wTx(begin, end, r, model, kappa, param.eta, param.lambda, true);
                 }
             }
+			global_i += l;
         }
 
         return loss / prob.meta.l;
@@ -622,11 +667,19 @@ ffm_model ffm_train_on_disk(string tr_path, string va_path, ffm_parameter param)
         cout.width(13);
         cout << fixed << setprecision(5) << tr_loss;
 
+        cout.width(13);
+        cout << fixed << setprecision(1) << timer.get();
+
         if(!va.is_empty()) {
             ffm_double va_loss = one_epoch(va, false);
+            ffm_float va_auc;
+            if(param.do_auc)
+                va_auc = cal_auc(va_orders, va_scores, va_labels);
 
             cout.width(13);
             cout << fixed << setprecision(5) << va_loss;
+            cout.width(13);
+            cout << fixed << setprecision(5) << va_auc;
 
             if(auto_stop) {
                 if(va_loss > best_va_loss) {
@@ -638,9 +691,10 @@ ffm_model ffm_train_on_disk(string tr_path, string va_path, ffm_parameter param)
                     best_va_loss = va_loss;
                 }
             }
+            cout.width(13);
+            cout << fixed << setprecision(1) << timer.get();
         }
-        cout.width(13);
-        cout << fixed << setprecision(1) << timer.get() << endl;
+        cout << endl;
     }
 
     return model;

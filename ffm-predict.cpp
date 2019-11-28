@@ -11,6 +11,7 @@
 
 #include <algorithm>
 #include "ffm.h"
+#include "timer.h"
 
 using namespace std;
 using namespace ffm;
@@ -89,53 +90,12 @@ Option parse_option(int argc, char **argv){
     return opt;
 }
 
-ffm_float cal_auc(vector<ffm_float>& va_orders, vector<ffm_float>& va_scores, vector<ffm_float>& va_labels) {
-	sort(va_orders.begin(), va_orders.end(), [&va_scores] (ffm_int i, ffm_int j) {return va_scores[i] < va_scores[j];});
-
-	ffm_float prev_score = va_scores[0];
-	ffm_long M = 0, N = 0;
-	ffm_long begin = 0, stuck_pos = 0, stuck_neg = 0;
-	ffm_float sum_pos_rank = 0;
-	ffm_int l = va_orders.size();
-	for (ffm_int i = 0; i < l; i++)
-	{
-		ffm_int sorted_i = va_orders[i];
-
-		ffm_float score = va_scores[sorted_i];
-		if (score != prev_score)
-		{
-			sum_pos_rank += stuck_pos*(begin+begin-1+stuck_pos+stuck_neg)*0.5;
-			prev_score = score;
-			begin = i;
-			stuck_neg = 0;
-			stuck_pos = 0;
-		}
-
-		ffm_float label = va_labels[sorted_i];
-		//printf("%lf %lf\n", score, label);
-
-		if (label > 0)
-		{
-			M++;
-			stuck_pos ++;
-		}
-		else
-		{
-			N++;
-			stuck_neg ++;
-		}
-	}
-	sum_pos_rank += stuck_pos*(begin+begin-1+stuck_pos+stuck_neg)*0.5;
-	ffm_float va_auc = (sum_pos_rank - 0.5*M*(M+1)) / (M*N);
-
-	return va_auc;
-}
-
 void predict_on_disk(Option opt) {
     string te_bin_path = "./" + opt.b_dir + "/" + basename(opt.test_path) + ".bin";
     ffm_read_problem_to_disk(opt.test_path, te_bin_path);
     ffm_model model =  ffm_load_model(opt.model_path);
 	vector<ffm_float> va_labels, va_scores, va_orders;
+    Timer timer;
     ffm_float va_logloss = ffm_predict_on_disk(te_bin_path,  model, va_scores, va_orders, va_labels, opt.subratio);
     ofstream f_out(opt.output_path);
 	for(ffm_float y_bar: va_scores) {
@@ -145,6 +105,7 @@ void predict_on_disk(Option opt) {
 	ffm_float va_auc = cal_auc(va_orders, va_scores, va_labels);
     cout << "logloss = "<< fixed << setprecision(5)<< va_logloss << endl;
     cout << "auc = "<< fixed << setprecision(5)<< va_auc << endl;
+	cout << "predict time = " << timer.get() << endl;
 }
 
 void predict(string test_path, string model_path, string output_path) {

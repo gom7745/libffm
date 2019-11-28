@@ -1,6 +1,7 @@
 #ifndef _LIBFFM_H
 #define _LIBFFM_H
 
+#include <fstream>
 #include <string>
 
 namespace ffm {
@@ -34,8 +35,44 @@ struct ffm_parameter {
     ffm_int k = 4; // number of latent factors
     bool normalization = true;
     bool auto_stop = false;
+	bool do_auc = false;
     string ws_model_path;
 };
+
+struct disk_problem_meta {
+    ffm_int n = 0;
+    ffm_int m = 0;
+    ffm_int l = 0;
+    ffm_int num_blocks = 0;
+    ffm_long B_pos = 0;
+	ffm_long nnz = 0;
+    uint64_t hash1;
+    uint64_t hash2;
+};
+
+struct problem_on_disk {
+    disk_problem_meta meta;
+    vector<ffm_float> Y;
+    vector<ffm_float> R;
+    vector<ffm_long> P;
+    vector<ffm_node> X;
+    vector<ffm_long> B;
+
+    problem_on_disk(string path);
+
+    int load_block(int block_index);
+
+    bool is_empty() {
+        return meta.l == 0;
+    }
+
+private:
+    ifstream f;
+};
+
+ffm_float cal_auc(vector<ffm_float>& va_orders, vector<ffm_float>& va_scores, vector<ffm_float>& va_labels);
+
+void ffm_problem_info(problem_on_disk &prob, string &path);
 
 void ffm_read_problem_to_disk(string txt_path, string bin_path);
 
